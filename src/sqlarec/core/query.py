@@ -10,15 +10,16 @@ from sqlalchemy.engine import MappingResult, Result, Row, ScalarResult
 from sqlalchemy.orm import Session, aliased
 
 ModelT = TypeVar("ModelT")
+SessionT = TypeVar("SessionT")
 
 
-class Query:
+class Query(Generic[SessionT]):
     """Build a select statement without mutating earlier query objects."""
 
     def __init__(
         self,
         statement: Any,
-        session: Session,
+        session: SessionT,
     ) -> None:
         """Initialize a query for a statement and its execution session."""
         self.statement = statement
@@ -71,14 +72,14 @@ class Query:
         """Return a query with SQLAlchemy ORM loader options applied."""
         return self._new(self.statement.options(*options))
 
-    def union(self, *others: Query | Select[Any]) -> Self:
+    def union(self, *others: Query[Any] | Select[Any]) -> Self:
         """Return a query that unions this statement with other statements."""
         statements = [
             other.statement if isinstance(other, Query) else other for other in others
         ]
         return self._new(union(self.statement, *statements))
 
-    def union_all(self, *others: Query | Select[Any]) -> Self:
+    def union_all(self, *others: Query[Any] | Select[Any]) -> Self:
         """Return a query that unions all rows from the supplied statements."""
         statements = [
             other.statement if isinstance(other, Query) else other for other in others
@@ -90,13 +91,13 @@ class Query:
         return self.statement.compile(*args, **kwargs)
 
 
-class ModelQuery(Query, Generic[ModelT]):
+class ModelQuery(Query[Session], Generic[ModelT]):
     """Execute a select statement and return mapped model instances."""
 
     def _compound_query(
         self,
         operation: Any,
-        *others: Query | Select[Any],
+        *others: Query[Any] | Select[Any],
     ) -> Self:
         entity = self.statement.column_descriptions[0]["entity"]
         statements = [
@@ -106,11 +107,11 @@ class ModelQuery(Query, Generic[ModelT]):
         entity_alias = aliased(entity, compound_subquery)
         return self.__class__(select(entity_alias), self.session)
 
-    def union(self, *others: Query | Select[Any]) -> Self:
+    def union(self, *others: Query[Any] | Select[Any]) -> Self:
         """Return an entity query containing distinct rows from all statements."""
         return self._compound_query(union, *others)
 
-    def union_all(self, *others: Query | Select[Any]) -> Self:
+    def union_all(self, *others: Query[Any] | Select[Any]) -> Self:
         """Return an entity query containing every row from all statements."""
         return self._compound_query(union_all, *others)
 
@@ -135,7 +136,7 @@ class ModelQuery(Query, Generic[ModelT]):
         return self.execute().one_or_none()
 
 
-class RowQuery(Query):
+class RowQuery(Query[Session]):
     """Execute a select statement and return SQLAlchemy rows."""
 
     def execute(self) -> Result[Any]:
