@@ -1,0 +1,23 @@
+# Virtual environments
+.venv/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Local environment files
+.env
+.env.*
+
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
