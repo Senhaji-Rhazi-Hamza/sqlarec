@@ -1,7 +1,7 @@
 [project]
 name = "sqlarec"
-version = "0.1.2"
-description = "A context-aware Active Record API for synchronous SQLAlchemy 2."
+version = "0.2.0"
+description = "Context-aware sync and async Active Record APIs for SQLAlchemy 2."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
@@ -19,7 +19,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "sqlalchemy>=2.0,<3",
+    "sqlalchemy[asyncio]>=2.0,<3",
 ]
 
 [project.urls]
@@ -29,9 +29,11 @@ Repository = "https://github.com/Senhaji-Rhazi-Hamza/sqlarec"
 
 [dependency-groups]
 dev = [
-    "mypy>=1.11",
+    "aiosqlite>=0.20",
     "pytest>=8.0",
+    "pytest-asyncio>=0.24",
     "ruff>=0.6",
+    "ty",
 ]
 
 [build-system]
@@ -43,6 +45,7 @@ packages = ["src/sqlarec"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
+asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.ruff]
@@ -52,9 +55,5 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
-[tool.mypy]
-python_version = "3.11"
-strict = true
-packages = ["sqlarec"]
-mypy_path = "src"
-plugins = ["sqlalchemy.ext.mypy.plugin"]
+[tool.ty.src]
+include = ["src", "tests"]

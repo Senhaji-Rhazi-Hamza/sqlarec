@@ -11,12 +11,13 @@ from sqlalchemy.engine import CursorResult, MappingResult, Result, Row, ScalarRe
 from sqlalchemy.orm import Mapper, Session
 
 ModelT = TypeVar("ModelT")
+SessionT = TypeVar("SessionT")
 
 
-class UpdateBuilder:
+class UpdateBuilder(Generic[SessionT]):
     """Build an update statement without mutating earlier wrapper objects."""
 
-    def __init__(self, statement: SQLUpdate, session: Session) -> None:
+    def __init__(self, statement: SQLUpdate, session: SessionT) -> None:
         """Initialize a wrapper for a statement and its execution session."""
         self.statement = statement
         self.session = session
@@ -41,7 +42,7 @@ class UpdateBuilder:
         return self.statement.compile(*args, **kwargs)
 
 
-class Update(UpdateBuilder):
+class Update(UpdateBuilder[Session]):
     """Execute an update or choose a typed wrapper for returned values."""
 
     @overload
@@ -83,7 +84,7 @@ class Update(UpdateBuilder):
         return cast(CursorResult[Any], self.session.execute(self.statement))
 
 
-class ModelUpdate(UpdateBuilder, Generic[ModelT]):
+class ModelUpdate(UpdateBuilder[Session], Generic[ModelT]):
     """Execute an update that returns mapped model instances."""
 
     def execute(self) -> ScalarResult[ModelT]:
@@ -107,7 +108,7 @@ class ModelUpdate(UpdateBuilder, Generic[ModelT]):
         return self.execute().one_or_none()
 
 
-class RowUpdate(UpdateBuilder):
+class RowUpdate(UpdateBuilder[Session]):
     """Execute an update that returns SQLAlchemy rows."""
 
     def execute(self) -> Result[Any]:
