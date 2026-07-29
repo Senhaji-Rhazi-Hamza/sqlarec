@@ -1,4 +1,4 @@
-.PHONY: install install-prod test lint typecheck format clean-cache clean
+.PHONY: install install-prod test lint typecheck format clean-cache clean-dist clean
 
 install:
 	uv sync
@@ -22,4 +22,7 @@ clean-cache:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf .mypy_cache .pytest_cache .ruff_cache
 
-clean: clean-cache
+clean-dist:
+	rm -rf dist
+
+clean: clean-cache clean-dist

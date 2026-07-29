@@ -31,13 +31,21 @@ class BaseModel(_ModelMixin, DeclarativeBase):
     def register_session_provider(cls, provider: Callable[[], Session]) -> None:
         """Register the callback used to obtain the current session.
 
-        The provider is shared by every model that inherits from ``BaseModel``.
+        Providers can only be registered on an abstract model base. Concrete
+        descendants inherit the provider from their nearest configured base.
 
         Args:
             provider: Zero-argument callable that returns the current synchronous
                 SQLAlchemy session.
+
+        Raises:
+            TypeError: If called on a concrete mapped model.
         """
-        BaseModel._session_provider = provider
+        if not cls.__dict__.get("__abstract__", False):
+            raise TypeError(
+                "Session providers must be registered on an abstract model base."
+            )
+        cls._session_provider = provider  # type: ignore[assignment]
 
     @_ClassProperty
     def session(cls) -> Session:
@@ -46,7 +54,7 @@ class BaseModel(_ModelMixin, DeclarativeBase):
         Raises:
             RuntimeError: If no session provider has been registered.
         """
-        provider = BaseModel._session_provider
+        provider = cls._session_provider # type: ignore
         if provider is None:
             raise RuntimeError(
                 "No session provider registered. Call "

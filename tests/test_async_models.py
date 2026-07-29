@@ -1,6 +1,8 @@
 """Tests for the public asynchronous Active Record model API."""
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 
 from conftest import AsyncUser
 from sqlarec.asyncio import (
@@ -24,6 +26,30 @@ def test_async_session_requires_registered_provider() -> None:
             raise AssertionError("accessing async session should have failed")
     finally:
         AsyncBaseModel._session_provider = previous_provider
+
+
+def test_async_session_provider_cannot_be_registered_on_concrete_model(
+    async_session: AsyncSession,
+) -> None:
+    with pytest.raises(TypeError, match="abstract model base"):
+        AsyncUser.register_session_provider(lambda: async_session)
+
+
+def test_async_abstract_base_owns_its_session_provider(
+    async_session: AsyncSession,
+) -> None:
+    class ApplicationBase(AsyncBaseModel):
+        __abstract__ = True
+
+    class ApplicationUser(ApplicationBase):
+        __tablename__ = "async_application_users"
+
+        id: Mapped[int] = mapped_column(primary_key=True)
+
+    ApplicationBase.register_session_provider(lambda: async_session)
+
+    assert ApplicationUser.session is async_session
+    assert "_session_provider" in ApplicationBase.__dict__
 
 
 async def test_async_create_query_save_and_delete(

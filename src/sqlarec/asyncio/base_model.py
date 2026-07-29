@@ -37,8 +37,19 @@ class AsyncBaseModel(AsyncAttrs, _ModelMixin, DeclarativeBase):
         cls,
         provider: Callable[[], AsyncSession],
     ) -> None:
-        """Register the callback used to obtain the current async session."""
-        AsyncBaseModel._session_provider = provider
+        """Register the callback used to obtain the current async session.
+
+        Providers can only be registered on an abstract model base. Concrete
+        descendants inherit the provider from their nearest configured base.
+
+        Raises:
+            TypeError: If called on a concrete mapped model.
+        """
+        if not cls.__dict__.get("__abstract__", False):
+            raise TypeError(
+                "Session providers must be registered on an abstract model base."
+            )
+        cls._session_provider = provider
 
     @_ClassProperty
     def session(cls) -> AsyncSession:
@@ -47,7 +58,7 @@ class AsyncBaseModel(AsyncAttrs, _ModelMixin, DeclarativeBase):
         Raises:
             RuntimeError: If no async-session provider has been registered.
         """
-        provider = AsyncBaseModel._session_provider
+        provider = cls._session_provider
         if provider is None:
             raise RuntimeError(
                 "No async session provider registered. Call "

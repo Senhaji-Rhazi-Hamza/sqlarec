@@ -165,12 +165,12 @@ The same principle applies to the synchronous API with `Session`.
 Query-building methods are immutable and do not perform I/O. Result methods are
 synchronous or awaitable according to the selected base:
 
-| Operation | Synchronous | Asynchronous |
-| --- | --- | --- |
-| All models | `User.query.all()` | `await User.query.all()` |
-| One model | `User.query.one_or_none()` | `await User.query.one_or_none()` |
-| Selected rows | `User.select(User.id).all()` | `await User.select(User.id).all()` |
-| Mappings | `User.select(User.id).mappings()` | `await User.select(User.id).mappings()` |
+| Operation     | Synchronous                         | Asynchronous                              |
+| ------------- | ----------------------------------- | ----------------------------------------- |
+| All models    | `User.query.all()`                | `await User.query.all()`                |
+| One model     | `User.query.one_or_none()`        | `await User.query.one_or_none()`        |
+| Selected rows | `User.select(User.id).all()`      | `await User.select(User.id).all()`      |
+| Mappings      | `User.select(User.id).mappings()` | `await User.select(User.id).mappings()` |
 
 Builders include `where()`, `filter_by()`, `order_by()`, `group_by()`,
 `having()`, `join()`, `outerjoin()`, `limit()`, `offset()`, `distinct()`,
@@ -180,13 +180,13 @@ Builders include `where()`, `filter_by()`, `order_by()`, `group_by()`,
 
 Write helpers flush the current session but never commit:
 
-| Operation | Synchronous | Asynchronous |
-| --- | --- | --- |
-| Create | `User.create(...)` | `await User.create(...)` |
-| Save | `user.save()` | `await user.save()` |
-| Delete | `user.delete()` | `await user.delete()` |
-| Primary-key lookup | `User.get_by_pk(42)` | `await User.get_by_pk(42)` |
-| Update | `User.update().values(...).execute()` | `await User.update().values(...).execute()` |
+| Operation          | Synchronous                             | Asynchronous                                  |
+| ------------------ | --------------------------------------- | --------------------------------------------- |
+| Create             | `User.create(...)`                    | `await User.create(...)`                    |
+| Save               | `user.save()`                         | `await user.save()`                         |
+| Delete             | `user.delete()`                       | `await user.delete()`                       |
+| Primary-key lookup | `User.get_by_pk(42)`                  | `await User.get_by_pk(42)`                  |
+| Update             | `User.update().values(...).execute()` | `await User.update().values(...).execute()` |
 
 Keeping commits outside model methods lets the application commit or roll back a
 complete unit of work atomically. Models also expose `User.session`, and every
@@ -205,13 +205,13 @@ Clone the repository and install all development dependencies:
 uv sync
 ```
 
-| Command | Purpose |
-| --- | --- |
-| `make test` | Run synchronous and asynchronous tests. |
-| `make lint` | Check source and tests with Ruff. |
-| `make typecheck` | Check source and tests with Astral ty. |
-| `make format` | Format source and tests with Ruff. |
-| `make clean` | Remove Python, pytest, and Ruff caches. |
+| Command            | Purpose                                 |
+| ------------------ | --------------------------------------- |
+| `make test`      | Run synchronous and asynchronous tests. |
+| `make lint`      | Check source and tests with Ruff.       |
+| `make typecheck` | Check source and tests with Astral ty.  |
+| `make format`    | Format source and tests with Ruff.      |
+| `make clean`     | Remove Python, pytest, and Ruff caches. |
 
 ## Current limitations
 

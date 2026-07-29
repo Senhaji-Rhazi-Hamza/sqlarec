@@ -1,6 +1,7 @@
 """Tests for the public Active Record model API."""
 
-from sqlalchemy.orm import Session
+import pytest
+from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from conftest import User
 from sqlarec import BaseModel
@@ -18,6 +19,28 @@ def test_session_requires_registered_provider() -> None:
             raise AssertionError("accessing session should have failed")
     finally:
         BaseModel._session_provider = previous_provider
+
+
+def test_session_provider_cannot_be_registered_on_concrete_model(
+    session: Session,
+) -> None:
+    with pytest.raises(TypeError, match="abstract model base"):
+        User.register_session_provider(lambda: session)
+
+
+def test_abstract_model_base_owns_its_session_provider(session: Session) -> None:
+    class ApplicationBase(BaseModel):
+        __abstract__ = True
+
+    class ApplicationUser(ApplicationBase):
+        __tablename__ = "application_users"
+
+        id: Mapped[int] = mapped_column(primary_key=True)
+
+    ApplicationBase.register_session_provider(lambda: session)
+
+    assert ApplicationUser.session is session
+    assert "_session_provider" in ApplicationBase.__dict__
 
 
 def test_create_flushes_without_committing(session: Session) -> None:
