@@ -29,7 +29,7 @@ class AsyncModelQuery(Query[AsyncSession], Generic[ModelT]):
         ]
         compound_subquery = operation(self.statement, *statements).subquery()
         entity_alias = aliased(entity, compound_subquery)
-        return self.__class__(select(entity_alias), self.session)
+        return self.__class__(select(entity_alias), self._session_provider)
 
     def union(self, *others: Query[Any] | Select[Any]) -> Self:
         """Return an entity query containing distinct rows from all statements."""
@@ -100,5 +100,5 @@ class _AsyncModelQueryProperty:
     ) -> AsyncModelQuery[ModelT]:
         return AsyncModelQuery(
             select(cast(Any, owner)),
-            cast(Any, owner).session,
+            cast(Any, owner)._get_session_provider(),
         )

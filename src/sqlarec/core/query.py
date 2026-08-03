@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Generic, Self, TypeVar, cast
 
 from sqlalchemy import Select, select, union, union_all
@@ -19,14 +19,22 @@ class Query(Generic[SessionT]):
     def __init__(
         self,
         statement: Any,
-        session: SessionT,
+        session: SessionT | Callable[[], SessionT],
     ) -> None:
-        """Initialize a query for a statement and its execution session."""
+        """Initialize a query with a session or context-aware provider."""
         self.statement = statement
-        self.session = session
+        if callable(session):
+            self._session_provider = cast(Callable[[], SessionT], session)
+        else:
+            self._session_provider = lambda: session
+
+    @property
+    def session(self) -> SessionT:
+        """Resolve and return the session for the current execution context."""
+        return self._session_provider()
 
     def _new(self, statement: Any) -> Self:
-        return self.__class__(statement, self.session)
+        return self.__class__(statement, self._session_provider)
 
     def where(self, *criteria: Any) -> Self:
         """Return a query with SQL ``WHERE`` criteria applied."""
@@ -105,7 +113,7 @@ class ModelQuery(Query[Session], Generic[ModelT]):
         ]
         compound_subquery = operation(self.statement, *statements).subquery()
         entity_alias = aliased(entity, compound_subquery)
-        return self.__class__(select(entity_alias), self.session)
+        return self.__class__(select(entity_alias), self._session_provider)
 
     def union(self, *others: Query[Any] | Select[Any]) -> Self:
         """Return an entity query containing distinct rows from all statements."""
@@ -174,5 +182,5 @@ class _ModelQueryProperty:
     ) -> ModelQuery[ModelT]:
         return ModelQuery(
             select(cast(Any, owner)),
-            cast(Any, owner).session,
+            cast(Any, owner)._get_session_provider(),
         )
