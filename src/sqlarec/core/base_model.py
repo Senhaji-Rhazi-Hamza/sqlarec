@@ -54,7 +54,7 @@ class BaseModel(_ModelMixin, DeclarativeBase):
         Raises:
             RuntimeError: If no session provider has been registered.
         """
-        provider = cls._session_provider # type: ignore
+        provider = cls._session_provider
         if provider is None:
             raise RuntimeError(
                 "No session provider registered. Call "
