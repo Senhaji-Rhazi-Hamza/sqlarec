@@ -6,7 +6,7 @@ from typing import Any, cast
 
 from sqlalchemy import Integer, inspect
 from sqlalchemy import Sequence as SQLSequence
-from sqlalchemy.orm import Mapper
+from sqlalchemy.orm import InstanceState, Mapper
 
 from sqlarec.utils import generate_identifier
 
@@ -102,9 +102,13 @@ class _ModelMixin:
         return {column.key: getattr(self, column.key) for column in table.columns}
 
     def __repr__(self) -> str:
-        table = cast(Any, self).__table__
+        state = cast(InstanceState[Any], inspect(self))
+        identity = state.identity
+        if identity is None:
+            return f"{type(self).__name__}()"
         values = ", ".join(
-            f"{column.key}={getattr(self, column.key)!r}" for column in table.columns
+            f"{name}={value!r}"
+            for name, value in zip(self.get_primary_key_names(), identity, strict=True)
         )
         return f"{type(self).__name__}({values})"
 

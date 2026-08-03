@@ -83,4 +83,20 @@ def test_primary_key_and_serialization_helpers(session: Session) -> None:
         "email": "hamza@example.com",
         "active": True,
     }
-    assert repr(user).startswith("User(id=")
+    assert repr(user) == f"User(id={user.id!r})"
+
+
+def test_repr_excludes_non_identity_values(session: Session) -> None:
+    transient = User(
+        name="Private Name",
+        email="secret-token@example.com",
+    )
+    persisted = User.create(
+        name="Private Name",
+        email="secret-token@example.com",
+    )
+
+    assert repr(transient) == "User()"
+    assert repr(persisted) == f"User(id={persisted.id!r})"
+    assert "Private Name" not in repr(persisted)
+    assert "secret-token@example.com" not in repr(persisted)
