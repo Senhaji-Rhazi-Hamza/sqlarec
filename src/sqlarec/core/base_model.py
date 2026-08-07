@@ -65,7 +65,13 @@ class BaseModel(_ModelMixin, DeclarativeBase):
         Raises:
             RuntimeError: If no session provider has been registered.
         """
-        return cls._get_session_provider()()
+        provider = cls._session_provider
+        if provider is None:
+            raise RuntimeError(
+                "No session provider registered. Call "
+                "BaseModel.register_session_provider() at app startup."
+            )
+        return provider()
 
     @overload
     @classmethod
