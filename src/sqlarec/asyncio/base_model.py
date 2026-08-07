@@ -51,6 +51,17 @@ class AsyncBaseModel(AsyncAttrs, _ModelMixin, DeclarativeBase):
             )
         cls._session_provider = provider
 
+    @classmethod
+    def _get_session_provider(cls) -> Callable[[], AsyncSession]:
+        """Return the provider inherited by this async model base."""
+        provider = cls._session_provider
+        if provider is None:
+            raise RuntimeError(
+                "No async session provider registered. Call "
+                "AsyncBaseModel.register_session_provider() at app startup."
+            )
+        return provider
+
     @_ClassProperty
     def session(cls) -> AsyncSession:
         """Return the current async session supplied by the provider.
@@ -58,13 +69,7 @@ class AsyncBaseModel(AsyncAttrs, _ModelMixin, DeclarativeBase):
         Raises:
             RuntimeError: If no async-session provider has been registered.
         """
-        provider = cls._session_provider
-        if provider is None:
-            raise RuntimeError(
-                "No async session provider registered. Call "
-                "AsyncBaseModel.register_session_provider() at app startup."
-            )
-        return provider()
+        return cls._get_session_provider()()
 
     @overload
     @classmethod
@@ -78,13 +83,13 @@ class AsyncBaseModel(AsyncAttrs, _ModelMixin, DeclarativeBase):
     def select(cls, *entities: Any) -> AsyncModelQuery[Self] | AsyncRowQuery:
         """Create an async entity query or row query."""
         if entities:
-            return AsyncRowQuery(select(*entities), cls.session)
-        return AsyncModelQuery(select(cls), cls.session)
+            return AsyncRowQuery(select(*entities), cls._get_session_provider())
+        return AsyncModelQuery(select(cls), cls._get_session_provider())
 
     @classmethod
     def update(cls) -> AsyncUpdate:
         """Create an immutable asynchronous update wrapper."""
-        return AsyncUpdate(update(cls), cls.session)
+        return AsyncUpdate(update(cls), cls._get_session_provider())
 
     @classmethod
     async def create(cls, **values: Any) -> Self:
@@ -99,14 +104,16 @@ class AsyncBaseModel(AsyncAttrs, _ModelMixin, DeclarativeBase):
 
     async def save(self) -> Self:
         """Add and flush this model without committing the transaction."""
-        self.session.add(self)
-        await self.session.flush()
+        session = self.session
+        session.add(self)
+        await session.flush()
         return self
 
     async def delete(self) -> None:
         """Delete and flush this model without committing the transaction."""
-        await self.session.delete(self)
-        await self.session.flush()
+        session = self.session
+        await session.delete(self)
+        await session.flush()
 
     @classmethod
     async def get_by_pk(cls, value: Any) -> Self | None:

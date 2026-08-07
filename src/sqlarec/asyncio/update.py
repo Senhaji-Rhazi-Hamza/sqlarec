@@ -49,8 +49,8 @@ class AsyncUpdate(UpdateBuilder[AsyncSession]):
             inspect(entity_or_column, raiseerr=False),
             Mapper,
         ):
-            return AsyncModelUpdate(statement, self.session)
-        return AsyncRowUpdate(statement, self.session)
+            return AsyncModelUpdate(statement, self._session_provider)
+        return AsyncRowUpdate(statement, self._session_provider)
 
     async def execute(self) -> CursorResult[Any]:
         """Execute the update and return its result."""

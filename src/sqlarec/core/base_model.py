@@ -47,6 +47,17 @@ class BaseModel(_ModelMixin, DeclarativeBase):
             )
         cls._session_provider = provider  # type: ignore[assignment]
 
+    @classmethod
+    def _get_session_provider(cls) -> Callable[[], Session]:
+        """Return the provider inherited by this model base."""
+        provider = cls._session_provider  # type: ignore
+        if provider is None:
+            raise RuntimeError(
+                "No session provider registered. Call "
+                "BaseModel.register_session_provider() at app startup."
+            )
+        return provider
+
     @_ClassProperty
     def session(cls) -> Session:
         """Return the current session supplied by the registered provider.
@@ -74,13 +85,13 @@ class BaseModel(_ModelMixin, DeclarativeBase):
     def select(cls, *entities: Any) -> ModelQuery[Self] | RowQuery:
         """Create an entity query or a row query for selected expressions."""
         if entities:
-            return RowQuery(select(*entities), cls.session)
-        return ModelQuery(select(cls), cls.session)
+            return RowQuery(select(*entities), cls._get_session_provider())
+        return ModelQuery(select(cls), cls._get_session_provider())
 
     @classmethod
     def update(cls) -> Update:
         """Create an immutable update wrapper for this model."""
-        return Update(update(cls), cls.session)
+        return Update(update(cls), cls._get_session_provider())
 
     @classmethod
     def create(cls, **values: Any) -> Self:
@@ -99,14 +110,16 @@ class BaseModel(_ModelMixin, DeclarativeBase):
 
     def save(self) -> Self:
         """Add and flush this model without committing the transaction."""
-        self.session.add(self)
-        self.session.flush()
+        session = self.session
+        session.add(self)
+        session.flush()
         return self
 
     def delete(self) -> None:
         """Delete and flush this model without committing the transaction."""
-        self.session.delete(self)
-        self.session.flush()
+        session = self.session
+        session.delete(self)
+        session.flush()
 
     @classmethod
     def get_by_pk(cls, value: Any) -> Self | None:

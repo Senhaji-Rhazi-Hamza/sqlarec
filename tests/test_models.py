@@ -1,6 +1,9 @@
 """Tests for the public Active Record model API."""
 
+from contextvars import ContextVar
+
 import pytest
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from conftest import User
@@ -41,6 +44,46 @@ def test_abstract_model_base_owns_its_session_provider(session: Session) -> None
 
     assert ApplicationUser.session is session
     assert "_session_provider" in ApplicationBase.__dict__
+
+
+def test_builders_resolve_the_session_when_executed() -> None:
+    engine_a = create_engine("sqlite:///:memory:")
+    engine_b = create_engine("sqlite:///:memory:")
+    BaseModel.metadata.create_all(engine_a)
+    BaseModel.metadata.create_all(engine_b)
+    previous_provider = BaseModel._session_provider
+
+    try:
+        with Session(engine_a) as session_a, Session(engine_b) as session_b:
+            session_a.add(
+                User(id=1, name="Tenant A", email="a@example.com", active=False)
+            )
+            session_b.add(
+                User(id=1, name="Tenant B", email="b@example.com", active=False)
+            )
+            session_a.commit()
+            session_b.commit()
+
+            current_session = ContextVar[Session]("current_session")
+            BaseModel.register_session_provider(current_session.get)
+
+            current_session.set(session_a)
+            query = User.query
+            rows = User.select(User.name)
+            user_update = User.update().where(User.id == 1).values(active=True)
+
+            current_session.set(session_b)
+
+            assert query.one().name == "Tenant B"
+            assert rows.one() == ("Tenant B",)
+            assert user_update.execute().rowcount == 1
+            session_b.commit()
+            assert session_a.scalar(select(User.active)) is False
+            assert session_b.scalar(select(User.active)) is True
+    finally:
+        BaseModel._session_provider = previous_provider
+        engine_a.dispose()
+        engine_b.dispose()
 
 
 def test_create_flushes_without_committing(session: Session) -> None:

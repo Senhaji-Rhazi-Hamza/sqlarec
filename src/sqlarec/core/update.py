@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Generic, Self, TypeVar, cast, overload
 
 from sqlalchemy import Update as SQLUpdate
@@ -17,13 +17,25 @@ SessionT = TypeVar("SessionT")
 class UpdateBuilder(Generic[SessionT]):
     """Build an update statement without mutating earlier wrapper objects."""
 
-    def __init__(self, statement: SQLUpdate, session: SessionT) -> None:
-        """Initialize a wrapper for a statement and its execution session."""
+    def __init__(
+        self,
+        statement: SQLUpdate,
+        session: SessionT | Callable[[], SessionT],
+    ) -> None:
+        """Initialize a wrapper with a session or context-aware provider."""
         self.statement = statement
-        self.session = session
+        if callable(session):
+            self._session_provider = cast(Callable[[], SessionT], session)
+        else:
+            self._session_provider = lambda: session
+
+    @property
+    def session(self) -> SessionT:
+        """Resolve and return the session for the current execution context."""
+        return self._session_provider()
 
     def _new(self, statement: SQLUpdate) -> Self:
-        return self.__class__(statement, self.session)
+        return self.__class__(statement, self._session_provider)
 
     def where(self, *criteria: Any) -> Self:
         """Return an update with SQL ``WHERE`` criteria applied."""
@@ -76,8 +88,8 @@ class Update(UpdateBuilder[Session]):
             inspect(entity_or_column, raiseerr=False),
             Mapper,
         ):
-            return ModelUpdate(statement, self.session)
-        return RowUpdate(statement, self.session)
+            return ModelUpdate(statement, self._session_provider)
+        return RowUpdate(statement, self._session_provider)
 
     def execute(self) -> CursorResult[Any]:
         """Execute the update and return its cursor result."""

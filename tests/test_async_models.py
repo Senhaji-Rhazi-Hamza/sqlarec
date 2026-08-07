@@ -1,7 +1,10 @@
 """Tests for the public asynchronous Active Record model API."""
 
+from contextvars import ContextVar
+
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
 from conftest import AsyncUser
@@ -50,6 +53,63 @@ def test_async_abstract_base_owns_its_session_provider(
 
     assert ApplicationUser.session is async_session
     assert "_session_provider" in ApplicationBase.__dict__
+
+
+async def test_async_builders_resolve_the_session_when_executed() -> None:
+    engine_a = create_async_engine("sqlite+aiosqlite:///:memory:")
+    engine_b = create_async_engine("sqlite+aiosqlite:///:memory:")
+    previous_provider = AsyncBaseModel._session_provider
+
+    try:
+        for engine in (engine_a, engine_b):
+            async with engine.begin() as connection:
+                await connection.run_sync(AsyncBaseModel.metadata.create_all)
+
+        async with (
+            AsyncSession(engine_a) as session_a,
+            AsyncSession(engine_b) as session_b,
+        ):
+            session_a.add(
+                AsyncUser(
+                    id=1,
+                    name="Tenant A",
+                    email="a@example.com",
+                    active=False,
+                )
+            )
+            session_b.add(
+                AsyncUser(
+                    id=1,
+                    name="Tenant B",
+                    email="b@example.com",
+                    active=False,
+                )
+            )
+            await session_a.commit()
+            await session_b.commit()
+
+            current_session = ContextVar[AsyncSession]("current_async_session")
+            AsyncBaseModel.register_session_provider(current_session.get)
+
+            current_session.set(session_a)
+            query = AsyncUser.query
+            rows = AsyncUser.select(AsyncUser.name)
+            user_update = (
+                AsyncUser.update().where(AsyncUser.id == 1).values(active=True)
+            )
+
+            current_session.set(session_b)
+
+            assert (await query.one()).name == "Tenant B"
+            assert await rows.one() == ("Tenant B",)
+            assert (await user_update.execute()).rowcount == 1
+            await session_b.commit()
+            assert await session_a.scalar(select(AsyncUser.active)) is False
+            assert await session_b.scalar(select(AsyncUser.active)) is True
+    finally:
+        AsyncBaseModel._session_provider = previous_provider
+        await engine_a.dispose()
+        await engine_b.dispose()
 
 
 async def test_async_create_query_save_and_delete(
