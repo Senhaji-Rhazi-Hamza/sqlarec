@@ -12,11 +12,34 @@ Your application remains in control of engines, sessions, commits, rollbacks,
 and cleanup. SQLARec resolves the current session and flushes writes, but never
 commits implicitly.
 
-You can use SQLARec in two ways:
+## Choose one of two mapping styles
 
-- Start with `BaseModel` for a simple declarative setup.
-- Combine `ActiveRecordMixin` with your own SQLAlchemy registry when you want
-  complete control over mapping.
+SQLARec supports two alternative mapping styles. Both provide the same query
+and persistence API; choose one according to who should own the SQLAlchemy
+mapping setup.
+
+| | Style 1: `BaseModel` | Style 2: `ActiveRecordMixin` + `registry` |
+| --- | --- | --- |
+| Best for | Most applications and the shortest setup | Existing domain classes or custom mapping requirements |
+| Mapping style | SQLAlchemy declarative mapping | SQLAlchemy imperative mapping |
+| Mapping ownership | SQLARec provides `DeclarativeBase`; your model declares its table and columns | Your application provides the registry, table, and mapping |
+
+The styles are alternatives for defining a model hierarchy:
+
+- Choose **Style 1** if you want SQLARec to provide the declarative base.
+- Choose **Style 2** if you want to map your own classes with SQLAlchemy's
+  `registry.map_imperatively()`.
+
+After mapping, models from either style use the same API:
+
+```python
+Model.query.where(...).all()
+Model.get_by_pk(...)
+Model.create(...)
+
+instance.save()
+instance.delete()
+```
 
 ## Install
 
@@ -33,10 +56,11 @@ uv add "psycopg[binary]"  # PostgreSQL
 
 SQLARec requires Python 3.11 or later and SQLAlchemy 2.
 
-## Quickstart with `BaseModel`
+## Style 1: declarative mapping with `BaseModel`
 
 `BaseModel` is the easiest way to get started. It already combines SQLARec's
-Active Record behavior with SQLAlchemy's `DeclarativeBase`.
+Active Record behavior with SQLAlchemy's `DeclarativeBase`. Define models as
+regular SQLAlchemy declarative classes:
 
 ```python
 from sqlalchemy import Boolean, String
@@ -82,28 +106,7 @@ session.commit()
 Use this style unless your application already has its own mapping layer or you
 specifically want to keep domain classes independent from table definitions.
 
-## Choose a mapping style
-
-Both styles provide the same query and persistence API. The difference is who
-defines the SQLAlchemy mapping foundation.
-
-| Style | Choose it when | Mapping ownership |
-| --- | --- | --- |
-| `BaseModel` | You want the shortest setup and standard declarative models. | SQLARec provides `DeclarativeBase`; your model declares columns. |
-| `ActiveRecordMixin` + `registry` | You have domain classes, existing tables, or custom mapping requirements. | Your application creates the registry, tables, and mappings. |
-
-The model API remains familiar in either case:
-
-```python
-Model.query.where(...).all()
-Model.get_by_pk(...)
-Model.create(...)
-
-instance.save()
-instance.delete()
-```
-
-## Use your own SQLAlchemy registry
+## Style 2: imperative mapping with your own registry
 
 `ActiveRecordMixin` supplies SQLARec behavior without inheriting from
 `DeclarativeBase`. This means a class can contain domain behavior first and be
@@ -116,6 +119,9 @@ from sqlarec import ActiveRecordMixin
 
 
 class BookingBehaviour:
+    id: int
+    reference: str
+
     def display_reference(self) -> str:
         return f"Booking {self.reference}"
 
@@ -124,8 +130,8 @@ class Booking(BookingBehaviour, ActiveRecordMixin):
     pass
 ```
 
-At this point, `Booking` does not choose a table or a declarative mapping
-strategy.
+The plain type annotations describe the domain attributes used by the behavior.
+At this point, `Booking` does not choose a table or a mapping strategy.
 
 ### 2. Define and apply the mapping
 
@@ -147,6 +153,10 @@ booking_table = Table(
 
 mapper_registry.map_imperatively(Booking, booking_table)
 ```
+
+Because the table columns are named `id` and `reference`, SQLAlchemy maps them
+to the annotated attributes with the same names. You can use explicit
+imperative properties when your attribute and column names differ.
 
 Your application can use any registry, metadata, tables, column properties, or
 relationships supported by SQLAlchemy. SQLARec does not replace or wrap that
