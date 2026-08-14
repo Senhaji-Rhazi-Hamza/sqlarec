@@ -3,11 +3,11 @@
 from contextvars import ContextVar
 
 import pytest
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy import Column, Integer, String, Table, create_engine, select
+from sqlalchemy.orm import Mapped, Session, mapped_column, registry
 
 from conftest import User
-from sqlarec import BaseModel
+from sqlarec import ActiveRecordMixin, BaseModel, ModelQuery
 
 
 def test_session_requires_registered_provider() -> None:
@@ -127,3 +127,58 @@ def test_primary_key_and_serialization_helpers(session: Session) -> None:
         "active": True,
     }
     assert repr(user).startswith("User(id=")
+
+
+def test_imperatively_mapped_active_record_mixin_has_full_api() -> None:
+    mapper_registry = registry()
+    booking_table = Table(
+        "bookings",
+        mapper_registry.metadata,
+        Column("id", Integer, primary_key=True),
+        Column("reference", String(100), nullable=False),
+    )
+
+    class BookingBehaviour:
+        reference: str
+
+        def label(self) -> str:
+            return f"Booking {self.reference}"
+
+    class Booking(BookingBehaviour, ActiveRecordMixin):
+        id: int
+        reference: str
+
+    mapper_registry.map_imperatively(Booking, booking_table)
+    engine = create_engine("sqlite:///:memory:")
+    mapper_registry.metadata.create_all(engine)
+    previous_provider = ActiveRecordMixin._session_provider
+
+    try:
+        with Session(engine, expire_on_commit=False) as session:
+            ActiveRecordMixin.register_session_provider(lambda: session)
+
+            assert Booking.session is session
+            assert isinstance(Booking.query, ModelQuery)
+            assert Booking.query.statement.column_descriptions[0]["entity"] is Booking
+
+            booking = Booking.create(reference="SQLAREC-1")
+            assert booking.label() == "Booking SQLAREC-1"
+            assert Booking.get_by_pk(booking.id) is booking
+            assert Booking.get_instance_by_keys(reference="SQLAREC-1") is booking
+            assert Booking.filter_by_keys(reference="SQLAREC-1") == [booking]
+            assert Booking.all() == [booking]
+            assert Booking.select(Booking.reference).one() == ("SQLAREC-1",)
+            assert booking.to_dict() == {"id": booking.id, "reference": "SQLAREC-1"}
+
+            Booking.update().where(Booking.id == booking.id).values(
+                reference="SQLAREC-2"
+            ).execute()
+            session.refresh(booking)
+            assert booking.reference == "SQLAREC-2"
+            assert booking.save() is booking
+            booking.delete()
+            assert not Booking.exists(booking.id)
+            assert session.in_transaction()
+    finally:
+        ActiveRecordMixin._session_provider = previous_provider
+        engine.dispose()

@@ -3,12 +3,13 @@
 from contextvars import ContextVar
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Column, Integer, String, Table, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, registry
 
 from conftest import AsyncUser
 from sqlarec.asyncio import (
+    AsyncActiveRecordMixin,
     AsyncBaseModel,
     AsyncModelQuery,
     AsyncModelUpdate,
@@ -193,3 +194,53 @@ async def test_async_update_wrappers(async_session: AsyncSession) -> None:
         AsyncUser.update().values(active=True).returning(AsyncUser.id),
         AsyncRowUpdate,
     )
+
+
+async def test_async_imperatively_mapped_active_record_mixin_has_full_api() -> None:
+    mapper_registry = registry()
+    booking_table = Table(
+        "async_bookings",
+        mapper_registry.metadata,
+        Column("id", Integer, primary_key=True),
+        Column("reference", String(100), nullable=False),
+    )
+
+    class Booking(AsyncActiveRecordMixin):
+        id: int
+        reference: str
+
+    mapper_registry.map_imperatively(Booking, booking_table)
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    previous_provider = AsyncActiveRecordMixin._session_provider
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(mapper_registry.metadata.create_all)
+
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            AsyncActiveRecordMixin.register_session_provider(lambda: session)
+
+            assert Booking.session is session
+            assert isinstance(Booking.query, AsyncModelQuery)
+            assert Booking.query.statement.column_descriptions[0]["entity"] is Booking
+
+            booking = await Booking.create(reference="ASYNC-1")
+            assert await Booking.get_by_pk(booking.id) is booking
+            assert await Booking.all() == [booking]
+            assert await Booking.select(Booking.reference).one() == ("ASYNC-1",)
+
+            await (
+                Booking.update()
+                .where(Booking.id == booking.id)
+                .values(reference="ASYNC-2")
+                .execute()
+            )
+            await session.refresh(booking)
+            assert booking.reference == "ASYNC-2"
+            assert await booking.save() is booking
+            await booking.delete()
+            assert not await Booking.exists(booking.id)
+            assert session.in_transaction()
+    finally:
+        AsyncActiveRecordMixin._session_provider = previous_provider
+        await engine.dispose()

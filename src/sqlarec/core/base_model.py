@@ -1,4 +1,4 @@
-"""Declarative base model with context-aware persistence helpers."""
+"""Mapping-independent Active Record helpers and the default declarative base."""
 
 from __future__ import annotations
 
@@ -14,12 +14,13 @@ from sqlarec.core.query import ModelQuery, RowQuery, _ModelQueryProperty
 from sqlarec.core.update import Update
 
 
-class BaseModel(_ModelMixin, DeclarativeBase):
-    """Base for SQLAlchemy models with query and persistence conveniences.
+class ActiveRecordMixin(_ModelMixin):
+    """Mapping-independent query and persistence conveniences.
 
     Register a session provider before using model operations. Write helpers
     flush changes but never commit, so the application retains control of the
-    transaction boundary.
+    transaction boundary. The class must be mapped by SQLAlchemy before using
+    helpers that inspect or query it.
     """
 
     __abstract__ = True
@@ -50,11 +51,12 @@ class BaseModel(_ModelMixin, DeclarativeBase):
     @classmethod
     def _get_session_provider(cls) -> Callable[[], Session]:
         """Return the provider inherited by this model base."""
-        provider = cls._session_provider  # type: ignore
+        provider = cls._session_provider
         if provider is None:
             raise RuntimeError(
                 "No session provider registered. Call "
-                "BaseModel.register_session_provider() at app startup."
+                "ActiveRecordMixin.register_session_provider() or register it "
+                "on an abstract model base at app startup."
             )
         return provider
 
@@ -69,7 +71,8 @@ class BaseModel(_ModelMixin, DeclarativeBase):
         if provider is None:
             raise RuntimeError(
                 "No session provider registered. Call "
-                "BaseModel.register_session_provider() at app startup."
+                "ActiveRecordMixin.register_session_provider() or register it "
+                "on an abstract model base at app startup."
             )
         return provider()
 
@@ -159,3 +162,9 @@ class BaseModel(_ModelMixin, DeclarativeBase):
     def filter_by_keys(cls, **values: Any) -> Sequence[Self]:
         """Return all models matching mapped attribute values."""
         return cls.query.filter_by(**values).all()
+
+
+class BaseModel(ActiveRecordMixin, DeclarativeBase):
+    """Default declarative base with synchronous Active Record capabilities."""
+
+    __abstract__ = True

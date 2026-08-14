@@ -1,4 +1,4 @@
-"""Declarative base model with asynchronous persistence helpers."""
+"""Mapping-independent async helpers and the default declarative base."""
 
 from __future__ import annotations
 
@@ -19,12 +19,13 @@ from sqlarec.core.descriptors import _ClassProperty
 from sqlarec.core.model import _ModelMixin
 
 
-class AsyncBaseModel(AsyncAttrs, _ModelMixin, DeclarativeBase):
-    """Base for SQLAlchemy models with asynchronous Active Record helpers.
+class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
+    """Mapping-independent asynchronous Active Record helpers.
 
     Register an async-session provider before model operations. Write helpers
     flush changes but never commit, leaving transaction ownership with the
-    application.
+    application. The class must be mapped by SQLAlchemy before using helpers
+    that inspect or query it.
     """
 
     __abstract__ = True
@@ -58,7 +59,8 @@ class AsyncBaseModel(AsyncAttrs, _ModelMixin, DeclarativeBase):
         if provider is None:
             raise RuntimeError(
                 "No async session provider registered. Call "
-                "AsyncBaseModel.register_session_provider() at app startup."
+                "AsyncActiveRecordMixin.register_session_provider() or register "
+                "it on an abstract model base at app startup."
             )
         return provider
 
@@ -149,3 +151,9 @@ class AsyncBaseModel(AsyncAttrs, _ModelMixin, DeclarativeBase):
     async def filter_by_keys(cls, **values: Any) -> Sequence[Self]:
         """Return all models matching mapped attribute values."""
         return await cls.query.filter_by(**values).all()
+
+
+class AsyncBaseModel(AsyncActiveRecordMixin, DeclarativeBase):
+    """Default declarative base with asynchronous Active Record capabilities."""
+
+    __abstract__ = True

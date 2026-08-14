@@ -1,6 +1,6 @@
 [project]
 name = "sqlarec"
-version = "0.2.2"
+version = "0.3.0"
 description = "Context-aware sync and async Active Record APIs for SQLAlchemy 2."
 readme = "README.md"
 requires-python = ">=3.11"

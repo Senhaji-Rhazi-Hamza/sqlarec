@@ -5,6 +5,7 @@ committing or rolling back transactions.
 """
 
 from sqlarec.core import (
+    ActiveRecordMixin,
     BaseModel,
     ModelQuery,
     ModelUpdate,
@@ -14,6 +15,7 @@ from sqlarec.core import (
 from sqlarec.database import get_engine, init_engine, new_session
 
 __all__ = [
+    "ActiveRecordMixin",
     "BaseModel",
     "ModelQuery",
     "ModelUpdate",
@@ -24,4 +26,4 @@ __all__ = [
     "new_session",
 ]
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"
