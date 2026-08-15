@@ -1,51 +1,22 @@
 # sqlarec
 
-`sqlarec` adds a small Active Record API to SQLAlchemy 2 models:
+`sqlarec` adds convenient query and persistence methods to SQLAlchemy 2 models:
 
 ```python
 user = User.query.where(User.email == "hamza@example.com").one_or_none()
 user = User.create(name="Hamza", email="hamza@example.com")
-user.save()
 ```
 
-Your application remains in control of engines, sessions, commits, rollbacks,
-and cleanup. SQLARec resolves the current session and flushes writes, but never
-commits implicitly.
-
-## Choose one of two mapping styles
-
-SQLARec supports two alternative mapping styles. Both provide the same query
-and persistence API; choose one according to who should own the SQLAlchemy
-mapping setup.
-
-| | Style 1: `BaseModel` | Style 2: `ActiveRecordMixin` + `registry` |
-| --- | --- | --- |
-| Best for | Most applications and the shortest setup | Existing domain classes or custom mapping requirements |
-| Mapping style | SQLAlchemy declarative mapping | SQLAlchemy imperative mapping |
-| Mapping ownership | SQLARec provides `DeclarativeBase`; your model declares its table and columns | Your application provides the registry, table, and mapping |
-
-The styles are alternatives for defining a model hierarchy:
-
-- Choose **Style 1** if you want SQLARec to provide the declarative base.
-- Choose **Style 2** if you want to map your own classes with SQLAlchemy's
-  `registry.map_imperatively()`.
-
-After mapping, models from either style use the same API:
-
-```python
-Model.query.where(...).all()
-Model.get_by_pk(...)
-Model.create(...)
-
-instance.save()
-instance.delete()
-```
+Your application still owns the engine, session lifecycle, and transaction
+boundaries. SQLARec flushes writes but never commits implicitly.
 
 ## Install
 
 ```bash
 uv add sqlarec
 ```
+
+SQLARec requires Python 3.11 or later and SQLAlchemy 2.
 
 For asynchronous use, also install a driver for your database:
 
@@ -54,19 +25,19 @@ uv add aiosqlite          # SQLite
 uv add "psycopg[binary]"  # PostgreSQL
 ```
 
-SQLARec requires Python 3.11 or later and SQLAlchemy 2.
+## Synchronous quickstart
 
-## Style 1: declarative mapping with `BaseModel`
+This section contains everything needed for the common synchronous use case.
 
-`BaseModel` is the easiest way to get started. It already combines SQLARec's
-Active Record behavior with SQLAlchemy's `DeclarativeBase`. Define models as
-regular SQLAlchemy declarative classes:
+### Define a model
+
+Inherit from `BaseModel` and define a regular SQLAlchemy declarative model:
 
 ```python
 from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from sqlarec import BaseModel, init_engine, new_session
+from sqlarec import BaseModel
 
 
 class User(BaseModel):
@@ -76,43 +47,193 @@ class User(BaseModel):
     name: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(255), unique=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+```
+
+### Configure the database
+
+Create an engine and register the session that model operations should use:
+
+```python
+from sqlarec import init_engine, new_session
 
 
-# Set up the database.
 engine = init_engine("sqlite:///:memory:")
 BaseModel.metadata.create_all(engine)
 
-# Register the session used by model operations.
 session = new_session()
 BaseModel.register_session_provider(lambda: session)
+```
 
-# Create and persist a user. create() adds and flushes; your app commits.
+`init_engine()` and `new_session()` are optional conveniences. You can register
+a `Session` created by your existing SQLAlchemy setup instead.
+
+### Create
+
+```python
 user = User.create(name="Hamza", email="hamza@example.com")
 session.commit()
+```
 
-# Query models directly from the class.
+`create()` constructs the model, adds it to the current session, and flushes.
+The application decides when to commit.
+
+### Read
+
+Query using mapped attributes:
+
+```python
 user = User.query.where(User.email == "hamza@example.com").one()
+users = User.query.filter_by(active=True).order_by(User.name).all()
+```
 
-# Change and persist an existing model.
+Or look up a primary key directly:
+
+```python
+same_user = User.get_by_pk(user.id)
+```
+
+### Update
+
+Change attributes and call `save()`:
+
+```python
 user.name = "Hamza Senhaji"
 user.save()
 session.commit()
+```
 
-# Delete follows the same transaction rule.
+For updates that do not require loading each model:
+
+```python
+User.update().where(User.id == user.id).values(active=False).execute()
+session.commit()
+```
+
+### Delete
+
+```python
 user.delete()
 session.commit()
 ```
 
-Use this style unless your application already has its own mapping layer or you
-specifically want to keep domain classes independent from table definitions.
+`create()`, `save()`, and `delete()` flush immediately but do not commit. This
+allows several operations to remain part of one application-controlled
+transaction:
 
-## Style 2: imperative mapping with your own registry
+```python
+try:
+    first = User.create(name="Hamza", email="hamza@example.com")
+    second = User.create(name="Reader", email="reader@example.com")
+    session.commit()
+except Exception:
+    session.rollback()
+    raise
+```
 
-`ActiveRecordMixin` supplies SQLARec behavior without inheriting from
-`DeclarativeBase`. This means a class can contain domain behavior first and be
-mapped separately afterward.
+## Asynchronous API
 
-### 1. Define the domain class
+The async API mirrors the synchronous API. Import it from `sqlarec.asyncio` and
+await operations that perform database I/O.
+
+### Define an async model
+
+```python
+from sqlalchemy import Boolean, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from sqlarec.asyncio import AsyncBaseModel
+
+
+class User(AsyncBaseModel):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    email: Mapped[str] = mapped_column(String(255), unique=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+```
+
+### Configure the async database
+
+```python
+from sqlarec.asyncio import init_async_engine, new_async_session
+
+
+engine = init_async_engine("sqlite+aiosqlite:///:memory:")
+
+async with engine.begin() as connection:
+    await connection.run_sync(AsyncBaseModel.metadata.create_all)
+```
+
+Open and register a session at the application boundary so it is always closed.
+The CRUD examples in the next section run inside this block:
+
+```python
+async with new_async_session() as session:
+    AsyncBaseModel.register_session_provider(lambda: session)
+    # Use models here.
+```
+
+### Create, read, update, and delete
+
+The operations are the same as the synchronous API, with `await` where I/O
+occurs:
+
+```python
+# Create
+user = await User.create(name="Hamza", email="hamza@example.com")
+await session.commit()
+
+# Read
+user = await User.query.where(User.email == "hamza@example.com").one()
+users = await User.query.filter_by(active=True).all()
+same_user = await User.get_by_pk(user.id)
+
+# Update
+user.name = "Hamza Senhaji"
+await user.save()
+await session.commit()
+
+# Delete
+await user.delete()
+await session.commit()
+```
+
+Bulk updates are awaitable too:
+
+```python
+result = await User.update().where(User.active.is_(False)).values(active=True).execute()
+await session.commit()
+```
+
+Async models include SQLAlchemy's `AsyncAttrs`. Prefer eager relationship
+loading, or use awaitable attributes when lazy loading is required:
+
+```python
+items = await booking.awaitable_attrs.items
+```
+
+## Advanced: use your own SQLAlchemy mapping
+
+The quickstarts use the simplest mapping style: `BaseModel` provides
+SQLAlchemy's `DeclarativeBase`. Most applications can stop there.
+
+SQLARec also supports classes mapped by an application-owned SQLAlchemy
+registry. Choose this advanced style when you already have domain classes,
+existing tables, or custom mapping requirements.
+
+| Mapping style | Model foundation | Who owns the mapping? |
+| --- | --- | --- |
+| Default declarative | `BaseModel` | SQLARec provides the declarative base; the model declares its table and columns. |
+| Custom imperative | `ActiveRecordMixin` | Your application provides the registry, table, and mapping. |
+
+Both styles provide the same query and persistence methods after the class has
+been mapped.
+
+### Define domain behavior
+
+`ActiveRecordMixin` adds SQLARec behavior without inheriting from
+`DeclarativeBase`:
 
 ```python
 from sqlarec import ActiveRecordMixin
@@ -130,12 +251,12 @@ class Booking(BookingBehaviour, ActiveRecordMixin):
     pass
 ```
 
-The plain type annotations describe the domain attributes used by the behavior.
-At this point, `Booking` does not choose a table or a mapping strategy.
+The annotations describe the fields used by the domain behavior. The class has
+not selected a table or mapping strategy yet.
 
-### 2. Define and apply the mapping
+### Map the class with a registry
 
-Use SQLAlchemy's regular imperative mapping API:
+Use SQLAlchemy's normal imperative mapping API:
 
 ```python
 from sqlalchemy import Column, Integer, String, Table
@@ -154,15 +275,11 @@ booking_table = Table(
 mapper_registry.map_imperatively(Booking, booking_table)
 ```
 
-Because the table columns are named `id` and `reference`, SQLAlchemy maps them
-to the annotated attributes with the same names. You can use explicit
-imperative properties when your attribute and column names differ.
+The `id` and `reference` columns become mapped attributes with the same names.
+Use SQLAlchemy's imperative `properties` configuration when attribute and
+column names differ.
 
-Your application can use any registry, metadata, tables, column properties, or
-relationships supported by SQLAlchemy. SQLARec does not replace or wrap that
-configuration.
-
-### 3. Register a session and use the model
+### Register a session and use the model
 
 ```python
 from sqlalchemy import create_engine
@@ -182,36 +299,164 @@ found = Booking.query.where(Booking.reference == "SQLAREC-1").one()
 print(found.display_reference())
 ```
 
-This is still normal SQLAlchemy imperative mapping. The mixin only adds the
-query and persistence conveniences.
+SQLARec does not replace or wrap the registry. Your application can use any
+tables, relationships, column properties, or mapping configuration supported by
+SQLAlchemy.
 
-## Manage sessions at the application boundary
+For asynchronous imperative mapping, compose the domain class with
+`AsyncActiveRecordMixin`, map it with `registry.map_imperatively()`, and
+register an `AsyncSession` provider on the mixin.
+
+## Query and persistence reference
+
+These APIs work with declarative and imperatively mapped models.
+
+### Query models
+
+`Model.query` returns mapped model instances:
+
+```python
+users = User.query.order_by(User.name).all()
+user = User.query.filter_by(email="hamza@example.com").one_or_none()
+```
+
+Result methods are:
+
+- `all()` for every matching model;
+- `first()` for the first model or `None`;
+- `one()` for exactly one model;
+- `one_or_none()` for zero or one model.
+
+SQLAlchemy raises its normal result exceptions when the number of rows does not
+match the selected result method.
+
+Query builders are immutable. Each method returns a new query, so a base query
+can be reused safely:
+
+```python
+example_users = User.query.where(User.email.endswith("@example.com"))
+
+first_page = example_users.order_by(User.name).limit(20)
+second_page = example_users.order_by(User.name).offset(20).limit(20)
+
+first_page_users = first_page.all()
+second_page_users = second_page.all()
+```
+
+The calls do not modify `example_users`, so it can be reused to create more
+specialized queries.
+
+Builder methods also work with selected rows. For example, group users and
+filter the groups with `having()`:
+
+```python
+from sqlalchemy import func
+
+
+active_summary = (
+    User.select(User.active, func.count(User.id).label("total"))
+    .group_by(User.active)
+    .having(func.count(User.id) > 0)
+    .order_by(User.active)
+    .all()
+)
+```
+
+Available builders include `where()`, `filter_by()`, `order_by()`,
+`group_by()`, `having()`, `join()`, `outerjoin()`, `limit()`, `offset()`,
+`distinct()`, `options()`, `union()`, and `union_all()`.
+
+### Select rows and mappings
+
+Pass mapped attributes to `select()` when you need rows rather than model
+instances:
+
+```python
+rows = User.select(User.id, User.email).order_by(User.id).all()
+email_row = User.select(User.email).where(User.id == 42).one()
+mappings = User.select(User.id, User.email).mappings().all()
+```
+
+### Use model helpers
+
+```python
+user = User.get_by_pk(42)
+exists = User.exists(42)
+users = User.all()
+
+user = User.get_instance_by_keys(email="hamza@example.com")
+users = User.filter_by_keys(active=True)
+user = User.get_or_create(email="hamza@example.com", name="Hamza")
+```
+
+Models also provide primary-key and serialization helpers:
+
+- `get_id()`
+- `get_primary_key_name()`
+- `get_primary_key_names()`
+- `has_one_primary_key()`
+- `to_dict()`
+
+### Return values from updates
+
+Use `returning()` when supported by the database:
+
+```python
+updated_users = (
+    User.update()
+    .where(User.active.is_(False))
+    .values(active=True)
+    .returning(User)
+    .all()
+)
+```
+
+### Use the underlying SQLAlchemy statement
+
+Every query and update wrapper exposes `.statement`. Use it when SQLAlchemy
+supports an operation that the SQLARec wrapper does not expose directly.
+
+For example, add `with_for_update()` to a model query and execute the resulting
+SQLAlchemy statement with the registered session:
+
+```python
+query = User.query.where(User.email == "hamza@example.com")
+statement = query.statement.with_for_update()
+
+user = User.session.scalars(statement).one_or_none()
+```
+
+The statement can also be compiled for inspection or logging:
+
+```python
+compiled = query.statement.compile(
+    engine,
+    compile_kwargs={"literal_binds": True},
+)
+print(compiled)
+```
+
+With an async model, execute the statement through its `AsyncSession`:
+
+```python
+statement = User.query.where(User.active.is_(True)).statement
+result = await User.session.scalars(statement)
+users = result.all()
+```
+
+Models expose the session resolved from the registered provider through
+`Model.session`.
+
+For async models, await query results, lookup helpers, write methods, and update
+execution.
+
+## Manage sessions in concurrent applications
 
 Register a zero-argument provider that returns the session for the current
-request, job, command, or task:
+request, command, job, or task. Query and update builders retain this provider
+and resolve the current session only when a statement executes.
 
-```python
-BaseModel.register_session_provider(lambda: current_session)
-```
-
-For imperatively mapped models, register it on the mixin:
-
-```python
-ActiveRecordMixin.register_session_provider(lambda: current_session)
-```
-
-SQLARec deliberately does not:
-
-- create a session for each operation;
-- commit or roll back a transaction;
-- decide when a transaction begins or ends;
-- close application-owned sessions.
-
-Query and update builders retain the provider rather than a particular session.
-They resolve the current session only when the statement executes. This makes a
-context-local provider suitable for request-scoped and task-scoped sessions.
-
-For example, an async application can bind one session to each task:
+For an async application, a `ContextVar` can bind one session to each task:
 
 ```python
 from contextvars import ContextVar
@@ -248,171 +493,12 @@ async def find_user(email: str) -> User | None:
 
 The same pattern works with synchronous `Session` objects.
 
-## Query and persist models
+SQLARec deliberately does not:
 
-The APIs below work with declarative and imperative models. Async methods have
-the same shape but must be awaited.
-
-### Query mapped models
-
-`Model.query` starts a query that returns instances of that model:
-
-```python
-users = User.query.order_by(User.name).all()
-
-active_users = (
-    User.query.where(User.active.is_(True)).order_by(User.name).limit(20).all()
-)
-
-user = User.query.filter_by(email="hamza@example.com").one_or_none()
-```
-
-Result methods are:
-
-- `all()` for every matching model;
-- `first()` for the first model or `None`;
-- `one()` for exactly one model;
-- `one_or_none()` for zero or one model.
-
-SQLAlchemy raises its normal result exceptions when `one()` or `one_or_none()`
-receives an unexpected number of rows.
-
-### Select individual values
-
-Pass mapped attributes to `select()` when you need rows instead of model
-instances:
-
-```python
-rows = User.select(User.id, User.email).order_by(User.id).all()
-email_row = User.select(User.email).where(User.id == 42).one()
-mappings = User.select(User.id, User.email).mappings().all()
-```
-
-Model and row queries support immutable builder methods including `where()`,
-`filter_by()`, `order_by()`, `group_by()`, `having()`, `join()`, `outerjoin()`,
-`limit()`, `offset()`, `distinct()`, `options()`, `union()`, and `union_all()`.
-Each call returns a new query, so a base query can safely be reused:
-
-```python
-users = User.query.order_by(User.id)
-active_users = users.filter_by(active=True)
-```
-
-### Find models with helper methods
-
-```python
-user = User.get_by_pk(42)
-exists = User.exists(42)
-users = User.all()
-
-user = User.get_instance_by_keys(email="hamza@example.com")
-users = User.filter_by_keys(active=True)
-user = User.get_or_create(email="hamza@example.com", name="Hamza")
-```
-
-Models also provide primary-key inspection and serialization helpers such as
-`get_id()`, `get_primary_key_name()`, `get_primary_key_names()`, and `to_dict()`.
-
-### Create, save, and delete
-
-```python
-user = User.create(name="Hamza", email="hamza@example.com")
-
-user.name = "Hamza Senhaji"
-user.save()
-
-user.delete()
-
-session.commit()
-```
-
-`create()`, `save()`, and `delete()` flush immediately, which makes generated
-identifiers and database errors available to the caller. They do not commit.
-The final transaction can still be committed or rolled back as one unit.
-
-### Execute bulk updates
-
-```python
-result = User.update().where(User.active.is_(False)).values(active=True).execute()
-
-session.commit()
-print(result.rowcount)
-```
-
-Use `returning()` when supported by the database:
-
-```python
-updated_users = (
-    User.update()
-    .where(User.active.is_(False))
-    .values(active=True)
-    .returning(User)
-    .all()
-)
-```
-
-Every query and update wrapper exposes `.statement` for SQLAlchemy features not
-covered by SQLARec. Models expose the resolved session through `Model.session`.
-
-## Use the asynchronous API
-
-The async API mirrors the synchronous API and lives in `sqlarec.asyncio`:
-
-```python
-import asyncio
-
-from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
-
-from sqlarec.asyncio import (
-    AsyncBaseModel,
-    init_async_engine,
-    new_async_session,
-)
-
-
-class User(AsyncBaseModel):
-    __tablename__ = "users"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(100))
-    email: Mapped[str] = mapped_column(String(255), unique=True)
-
-
-async def main() -> None:
-    engine = init_async_engine("sqlite+aiosqlite:///:memory:")
-
-    async with engine.begin() as connection:
-        await connection.run_sync(AsyncBaseModel.metadata.create_all)
-
-    async with new_async_session() as session:
-        AsyncBaseModel.register_session_provider(lambda: session)
-
-        user = await User.create(name="Hamza", email="hamza@example.com")
-        await session.commit()
-
-        found = await User.query.where(User.id == user.id).one()
-        found.name = "Hamza Senhaji"
-        await found.save()
-        await session.commit()
-
-    await engine.dispose()
-
-
-asyncio.run(main())
-```
-
-For custom imperative mappings, combine your domain class with
-`AsyncActiveRecordMixin`, map it with `registry.map_imperatively()`, and register
-an `AsyncSession` provider on the mixin. `AsyncActiveRecordMixin` also includes
-SQLAlchemy's `AsyncAttrs`.
-
-Prefer eager relationship loading in async code. When lazy loading is needed,
-use SQLAlchemy's awaitable attributes:
-
-```python
-items = await booking.awaitable_attrs.items
-```
+- create a session for each operation;
+- commit or roll back transactions;
+- decide when transactions begin or end;
+- close application-owned sessions.
 
 ## How the pieces fit together
 
@@ -429,10 +515,6 @@ Imperatively mapped model
 ```
 
 The async equivalents are `AsyncActiveRecordMixin` and `AsyncBaseModel`.
-
-`init_engine()` and `new_session()` are optional conveniences. Applications can
-use their existing SQLAlchemy engine and session setup with either mapping
-style.
 
 ## Develop the library
 
