@@ -60,6 +60,10 @@ class AsyncModelQuery(Query[AsyncSession], Generic[ModelT]):
         """Return zero or one model or raise when multiple rows match."""
         return (await self.execute()).one_or_none()
 
+    async def exists(self) -> bool:
+        """Return whether this query matches at least one model."""
+        return bool(await self.session.scalar(select(self.statement.exists())))
+
 
 class AsyncRowQuery(Query[AsyncSession]):
     """Execute a select statement asynchronously and return SQLAlchemy rows."""
@@ -84,6 +88,10 @@ class AsyncRowQuery(Query[AsyncSession]):
     async def one_or_none(self) -> Row[Any] | None:
         """Return zero or one row or raise when multiple rows match."""
         return (await self.execute()).one_or_none()
+
+    async def exists(self) -> bool:
+        """Return whether this query matches at least one row."""
+        return bool(await self.session.scalar(select(self.statement.exists())))
 
     async def mappings(self) -> MappingResult:
         """Execute the statement and return mapping-style rows."""

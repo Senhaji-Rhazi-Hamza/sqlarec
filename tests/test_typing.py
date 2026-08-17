@@ -35,6 +35,7 @@ def _check_session_helper_types(
 def _check_sync_types(session: Session) -> None:
     assert_type(User.query, ModelQuery[User])
     assert_type(User.query.all(), Sequence[User])
+    assert_type(User.query.exists(), bool)
     assert_type(User.create(name="Hamza", email="hamza@example.com"), User)
     assert_type(
         User.create_with_session(session, name="Hamza", email="hamza@example.com"),
@@ -47,6 +48,7 @@ def _check_sync_types(session: Session) -> None:
 async def _check_async_types(async_session: AsyncSession) -> None:
     assert_type(AsyncUser.query, AsyncModelQuery[AsyncUser])
     assert_type(await AsyncUser.query.all(), Sequence[AsyncUser])
+    assert_type(await AsyncUser.query.exists(), bool)
     assert_type(
         await AsyncUser.create(name="Hamza", email="hamza@example.com"),
         AsyncUser,

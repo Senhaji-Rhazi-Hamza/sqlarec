@@ -340,6 +340,7 @@ These APIs work with declarative and imperatively mapped models.
 ```python
 users = User.query.order_by(User.name).all()
 user = User.query.filter_by(email="hamza@example.com").one_or_none()
+has_active_users = User.query.where(User.active.is_(True)).exists()
 ```
 
 Result methods are:
@@ -347,7 +348,8 @@ Result methods are:
 - `all()` for every matching model;
 - `first()` for the first model or `None`;
 - `one()` for exactly one model;
-- `one_or_none()` for zero or one model.
+- `one_or_none()` for zero or one model;
+- `exists()` for whether at least one model matches.
 
 SQLAlchemy raises its normal result exceptions when the number of rows does not
 match the selected result method.
@@ -387,6 +389,18 @@ active_summary = (
 Available builders include `where()`, `filter_by()`, `order_by()`,
 `group_by()`, `having()`, `join()`, `outerjoin()`, `limit()`, `offset()`,
 `distinct()`, `options()`, `union()`, and `union_all()`.
+
+`exists()` also works with selected rows and uses the complete builder chain:
+
+```python
+has_active_emails = User.select(User.email).where(User.active.is_(True)).exists()
+```
+
+In async code, await the result:
+
+```python
+has_active_users = await AsyncUser.query.where(AsyncUser.active.is_(True)).exists()
+```
 
 ### Override the session for one builder
 

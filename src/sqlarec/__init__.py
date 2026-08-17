@@ -24,4 +24,4 @@ __all__ = [
     "new_session_from_engine",
 ]
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"

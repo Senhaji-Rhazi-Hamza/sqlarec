@@ -158,6 +158,10 @@ class ModelQuery(Query[Session], Generic[ModelT]):
         """Return zero or one model or raise when multiple rows match."""
         return self.execute().one_or_none()
 
+    def exists(self) -> bool:
+        """Return whether this query matches at least one model."""
+        return bool(self.session.scalar(select(self.statement.exists())))
+
 
 class RowQuery(Query[Session]):
     """Execute a select statement and return SQLAlchemy rows."""
@@ -181,6 +185,10 @@ class RowQuery(Query[Session]):
     def one_or_none(self) -> Row[Any] | None:
         """Return zero or one row or raise when multiple rows match."""
         return self.execute().one_or_none()
+
+    def exists(self) -> bool:
+        """Return whether this query matches at least one row."""
+        return bool(self.session.scalar(select(self.statement.exists())))
 
     def mappings(self) -> MappingResult:
         """Execute the statement and return mapping-style rows."""

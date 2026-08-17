@@ -205,6 +205,23 @@ async def test_async_row_query_and_mappings(async_session: AsyncSession) -> None
     assert (await rows.mappings()).one()["email"] == "hamza@example.com"
 
 
+async def test_async_query_exists_returns_boolean(
+    async_session: AsyncSession,
+) -> None:
+    await AsyncUser.create(name="Hamza", email="hamza@example.com")
+
+    assert await AsyncUser.query.filter_by(email="hamza@example.com").exists()
+    assert not await AsyncUser.query.filter_by(email="missing@example.com").exists()
+    assert (
+        await AsyncUser.select(AsyncUser.id).where(AsyncUser.name == "Hamza").exists()
+    )
+    assert (
+        not await AsyncUser.select(AsyncUser.id)
+        .where(AsyncUser.name == "Missing")
+        .exists()
+    )
+
+
 async def test_async_union_preserves_entities(async_session: AsyncSession) -> None:
     first = await AsyncUser.create(name="Hamza", email="hamza@example.com")
     second = await AsyncUser.create(name="Reader", email="reader@example.com")

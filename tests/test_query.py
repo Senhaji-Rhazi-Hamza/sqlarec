@@ -31,6 +31,15 @@ def test_row_query_returns_rows_and_mappings(session: Session) -> None:
     assert rows.mappings().one()["email"] == "hamza@example.com"
 
 
+def test_query_exists_returns_boolean_for_models_and_rows(session: Session) -> None:
+    User.create(name="Hamza", email="hamza@example.com")
+
+    assert User.query.filter_by(email="hamza@example.com").exists()
+    assert not User.query.filter_by(email="missing@example.com").exists()
+    assert User.select(User.id).where(User.name == "Hamza").exists()
+    assert not User.select(User.id).where(User.name == "Missing").exists()
+
+
 def test_model_query_union_preserves_entity_results(session: Session) -> None:
     first = User.create(name="Hamza", email="hamza@example.com")
     second = User.create(name="Reader", email="reader@example.com")
