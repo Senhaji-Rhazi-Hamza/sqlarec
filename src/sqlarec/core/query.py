@@ -36,6 +36,21 @@ class Query(Generic[SessionT]):
     def _new(self, statement: Any) -> Self:
         return self.__class__(statement, self._session_provider)
 
+    def with_session(self, session: SessionT) -> Self:
+        """Return a query using a specific session instead of the provider.
+
+        Allows explicit session override for builder chains without affecting
+        the registered provider. Maintains immutability by creating a new query
+        instance with the custom session.
+
+        Args:
+            session: The session to use for this query chain.
+
+        Returns:
+            A new query instance bound to the specified session.
+        """
+        return self.__class__(self.statement, lambda: session)
+
     def where(self, *criteria: Any) -> Self:
         """Return a query with SQL ``WHERE`` criteria applied."""
         return self._new(self.statement.where(*criteria))
