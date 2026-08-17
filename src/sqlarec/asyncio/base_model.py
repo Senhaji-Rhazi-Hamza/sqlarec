@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, Self, overload
+from typing import Any, ClassVar, Self, cast, overload
 
-from sqlalchemy import select, update
+from sqlalchemy import inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, InstanceState
 
 from sqlarec.asyncio.query import (
     AsyncModelQuery,
@@ -99,6 +99,19 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
         return await cls.create_instance(**cls._prepare_create_values(values))
 
     @classmethod
+    async def create_with_session(
+        cls,
+        session: AsyncSession,
+        /,
+        **values: Any,
+    ) -> Self:
+        """Construct, add, and flush through an explicit async session."""
+        instance = cls(**cls._prepare_create_values(values))
+        session.add(instance)
+        await session.flush()
+        return instance
+
+    @classmethod
     async def create_instance(cls, **values: Any) -> Self:
         """Construct, add, and flush without generating an identifier."""
         instance = cls(**values)
@@ -106,14 +119,16 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
 
     async def save(self) -> Self:
         """Add and flush this model without committing the transaction."""
-        session = self.session
+        state = cast(InstanceState[Any], inspect(self))
+        session = state.async_session or self.session
         session.add(self)
         await session.flush()
         return self
 
     async def delete(self) -> None:
         """Delete and flush this model without committing the transaction."""
-        session = self.session
+        state = cast(InstanceState[Any], inspect(self))
+        session = state.async_session or self.session
         await session.delete(self)
         await session.flush()
 

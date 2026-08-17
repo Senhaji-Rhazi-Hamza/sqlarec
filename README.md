@@ -411,9 +411,29 @@ admin_session.commit()
 or replace the model's registered provider. Builder methods called afterward
 continue using the explicit session.
 
+Use `create_with_session()` when a new model must use an explicit session:
+
+```python
+user = User.create_with_session(
+    admin_session,
+    name="Hamza",
+    email="hamza@example.com",
+)
+```
+
+Models created or loaded through an explicit session remain attached to it.
+Their `save()` and `delete()` methods use that attached session instead of the
+registered provider. Transient or detached models fall back to the provider.
+
 The same method works with async builders:
 
 ```python
+user = await AsyncUser.create_with_session(
+    async_session,
+    name="Hamza",
+    email="hamza@example.com",
+)
+
 active_users = AsyncUser.query.with_session(async_session).where(
     AsyncUser.active.is_(True)
 )

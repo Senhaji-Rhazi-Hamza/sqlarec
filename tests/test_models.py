@@ -3,7 +3,7 @@
 from contextvars import ContextVar
 
 import pytest
-from sqlalchemy import Column, Integer, String, Table, create_engine, select
+from sqlalchemy import Column, Integer, String, Table, create_engine, inspect, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, registry
 
 from conftest import User
@@ -92,6 +92,40 @@ def test_create_flushes_without_committing(session: Session) -> None:
     assert user.id is not None
     assert session.in_transaction()
     assert User.get_by_pk(user.id) is user
+
+
+def test_explicit_session_creation_and_attached_writes_override_provider() -> None:
+    provider_engine = create_engine("sqlite:///:memory:")
+    explicit_engine = create_engine("sqlite:///:memory:")
+    BaseModel.metadata.create_all(provider_engine)
+    BaseModel.metadata.create_all(explicit_engine)
+    previous_provider = BaseModel._session_provider
+
+    try:
+        with (
+            Session(provider_engine) as provider_session,
+            Session(explicit_engine) as explicit_session,
+        ):
+            BaseModel.register_session_provider(lambda: provider_session)
+
+            user = User.create_with_session(
+                explicit_session,
+                name="Hamza",
+                email="hamza@example.com",
+            )
+            assert inspect(user).session is explicit_session
+
+            user.name = "Hamza S."
+            assert user.save() is user
+            assert User.query.with_session(explicit_session).one().name == "Hamza S."
+
+            user.delete()
+            assert User.query.with_session(explicit_session).one_or_none() is None
+            assert User.query.with_session(provider_session).one_or_none() is None
+    finally:
+        BaseModel._session_provider = previous_provider
+        provider_engine.dispose()
+        explicit_engine.dispose()
 
 
 def test_save_delete_and_exists(session: Session) -> None:

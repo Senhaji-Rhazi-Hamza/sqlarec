@@ -3,7 +3,7 @@
 from contextvars import ContextVar
 
 import pytest
-from sqlalchemy import Column, Integer, String, Table, select
+from sqlalchemy import Column, Integer, String, Table, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column, registry
 
@@ -129,6 +129,50 @@ async def test_async_create_query_save_and_delete(
 
     await user.delete()
     assert not await AsyncUser.exists(user.id)
+
+
+async def test_async_explicit_session_overrides_provider() -> None:
+    provider_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    explicit_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    previous_provider = AsyncBaseModel._session_provider
+
+    try:
+        for engine in (provider_engine, explicit_engine):
+            async with engine.begin() as connection:
+                await connection.run_sync(AsyncBaseModel.metadata.create_all)
+
+        async with (
+            AsyncSession(provider_engine) as provider_session,
+            AsyncSession(explicit_engine) as explicit_session,
+        ):
+            AsyncBaseModel.register_session_provider(lambda: provider_session)
+
+            user = await AsyncUser.create_with_session(
+                explicit_session,
+                name="Hamza",
+                email="hamza@example.com",
+            )
+            assert inspect(user).async_session is explicit_session
+
+            user.name = "Hamza S."
+            assert await user.save() is user
+            assert (
+                await AsyncUser.query.with_session(explicit_session).one()
+            ).name == "Hamza S."
+
+            await user.delete()
+            assert (
+                await AsyncUser.query.with_session(explicit_session).one_or_none()
+                is None
+            )
+            assert (
+                await AsyncUser.query.with_session(provider_session).one_or_none()
+                is None
+            )
+    finally:
+        AsyncBaseModel._session_provider = previous_provider
+        await provider_engine.dispose()
+        await explicit_engine.dispose()
 
 
 async def test_async_queries_are_immutable(async_session: AsyncSession) -> None:

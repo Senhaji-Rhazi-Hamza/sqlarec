@@ -32,19 +32,31 @@ def _check_session_helper_types(
     assert_type(new_async_session_from_engine(async_engine), AsyncSession)
 
 
-def _check_sync_types() -> None:
+def _check_sync_types(session: Session) -> None:
     assert_type(User.query, ModelQuery[User])
     assert_type(User.query.all(), Sequence[User])
     assert_type(User.create(name="Hamza", email="hamza@example.com"), User)
+    assert_type(
+        User.create_with_session(session, name="Hamza", email="hamza@example.com"),
+        User,
+    )
     assert_type(ImperativeUser.query, ModelQuery[ImperativeUser])
     assert_type(ImperativeUser.create(name="Hamza"), ImperativeUser)
 
 
-async def _check_async_types() -> None:
+async def _check_async_types(async_session: AsyncSession) -> None:
     assert_type(AsyncUser.query, AsyncModelQuery[AsyncUser])
     assert_type(await AsyncUser.query.all(), Sequence[AsyncUser])
     assert_type(
         await AsyncUser.create(name="Hamza", email="hamza@example.com"),
+        AsyncUser,
+    )
+    assert_type(
+        await AsyncUser.create_with_session(
+            async_session,
+            name="Hamza",
+            email="hamza@example.com",
+        ),
         AsyncUser,
     )
     assert_type(

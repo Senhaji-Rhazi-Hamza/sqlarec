@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, Self, overload
+from typing import Any, ClassVar, Self, cast, overload
 
-from sqlalchemy import select, update
-from sqlalchemy.orm import DeclarativeBase, Session
+from sqlalchemy import inspect, select, update
+from sqlalchemy.orm import DeclarativeBase, InstanceState, Session
 
 from sqlarec.core.descriptors import _ClassProperty
 from sqlarec.core.model import _ModelMixin
@@ -106,6 +106,19 @@ class ActiveRecordMixin(_ModelMixin):
         return cls.create_instance(**cls._prepare_create_values(values))
 
     @classmethod
+    def create_with_session(
+        cls,
+        session: Session,
+        /,
+        **values: Any,
+    ) -> Self:
+        """Construct, add, and flush a model through an explicit session."""
+        instance = cls(**cls._prepare_create_values(values))
+        session.add(instance)
+        session.flush()
+        return instance
+
+    @classmethod
     def create_instance(cls, **values: Any) -> Self:
         """Construct, add, and flush a model without generating an identifier."""
         instance = cls(**values)
@@ -113,14 +126,16 @@ class ActiveRecordMixin(_ModelMixin):
 
     def save(self) -> Self:
         """Add and flush this model without committing the transaction."""
-        session = self.session
+        state = cast(InstanceState[Any], inspect(self))
+        session = state.session or self.session
         session.add(self)
         session.flush()
         return self
 
     def delete(self) -> None:
         """Delete and flush this model without committing the transaction."""
-        session = self.session
+        state = cast(InstanceState[Any], inspect(self))
+        session = state.session or self.session
         session.delete(self)
         session.flush()
 
