@@ -54,18 +54,34 @@ class User(BaseModel):
 Create an engine and register the session that model operations should use:
 
 ```python
-from sqlarec import init_engine, new_session
+from sqlalchemy import create_engine
+
+from sqlarec import new_session_from_engine
 
 
-engine = init_engine("sqlite:///:memory:")
+engine = create_engine("sqlite:///:memory:")
 BaseModel.metadata.create_all(engine)
 
-session = new_session()
+session = new_session_from_engine(engine)
 BaseModel.register_session_provider(lambda: session)
 ```
 
-`init_engine()` and `new_session()` are optional conveniences. You can register
-a `Session` created by your existing SQLAlchemy setup instead.
+The application creates and owns the engine. `new_session_from_engine()` is an
+optional convenience around SQLAlchemy's `sessionmaker`; you can register a
+`Session` created by your existing setup instead.
+
+By default, the helper creates sessions with `autoflush=False` and
+`expire_on_commit=False`. Override those defaults or pass other `sessionmaker`
+options when needed:
+
+```python
+session = new_session_from_engine(
+    engine,
+    autoflush=True,
+    expire_on_commit=True,
+    info={"service": "accounts"},
+)
+```
 
 ### Create
 
@@ -156,10 +172,12 @@ class User(AsyncBaseModel):
 ### Configure the async database
 
 ```python
-from sqlarec.asyncio import init_async_engine, new_async_session
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from sqlarec.asyncio import new_async_session_from_engine
 
 
-engine = init_async_engine("sqlite+aiosqlite:///:memory:")
+engine = create_async_engine("sqlite+aiosqlite:///:memory:")
 
 async with engine.begin() as connection:
     await connection.run_sync(AsyncBaseModel.metadata.create_all)
@@ -169,10 +187,14 @@ Open and register a session at the application boundary so it is always closed.
 The CRUD examples in the next section run inside this block:
 
 ```python
-async with new_async_session() as session:
+async with new_async_session_from_engine(engine) as session:
     AsyncBaseModel.register_session_provider(lambda: session)
     # Use models here.
 ```
+
+`new_async_session_from_engine()` accepts the same `autoflush`,
+`expire_on_commit`, and additional sessionmaker options as the synchronous
+helper.
 
 ### Create, read, update, and delete
 
@@ -222,10 +244,10 @@ SQLARec also supports classes mapped by an application-owned SQLAlchemy
 registry. Choose this advanced style when you already have domain classes,
 existing tables, or custom mapping requirements.
 
-| Mapping style | Model foundation | Who owns the mapping? |
-| --- | --- | --- |
-| Default declarative | `BaseModel` | SQLARec provides the declarative base; the model declares its table and columns. |
-| Custom imperative | `ActiveRecordMixin` | Your application provides the registry, table, and mapping. |
+| Mapping style       | Model foundation      | Who owns the mapping?                                                            |
+| ------------------- | --------------------- | -------------------------------------------------------------------------------- |
+| Default declarative | `BaseModel`         | SQLARec provides the declarative base; the model declares its table and columns. |
+| Custom imperative   | `ActiveRecordMixin` | Your application provides the registry, table, and mapping.                      |
 
 Both styles provide the same query and persistence methods after the class has
 been mapped.
@@ -283,12 +305,12 @@ column names differ.
 
 ```python
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 
+from sqlarec import new_session_from_engine
 
 engine = create_engine("sqlite:///:memory:")
 mapper_registry.metadata.create_all(engine)
-session = Session(engine, expire_on_commit=False)
+session = new_session_from_engine(engine)
 
 ActiveRecordMixin.register_session_provider(lambda: session)
 
@@ -365,6 +387,38 @@ active_summary = (
 Available builders include `where()`, `filter_by()`, `order_by()`,
 `group_by()`, `having()`, `join()`, `outerjoin()`, `limit()`, `offset()`,
 `distinct()`, `options()`, `union()`, and `union_all()`.
+
+### Override the session for one builder
+
+Queries and updates normally resolve the session from the model's registered
+provider. Use `with_session()` when one builder chain must run through a
+specific session:
+
+```python
+reporting_query = (
+    User.query.with_session(reporting_session)
+    .where(User.active.is_(True))
+    .order_by(User.name)
+)
+users = reporting_query.all()
+
+admin_update = User.update().with_session(admin_session)
+admin_update.where(User.id == 42).values(active=False).execute()
+admin_session.commit()
+```
+
+`with_session()` returns a new builder. It does not mutate the original builder
+or replace the model's registered provider. Builder methods called afterward
+continue using the explicit session.
+
+The same method works with async builders:
+
+```python
+active_users = AsyncUser.query.with_session(async_session).where(
+    AsyncUser.active.is_(True)
+)
+users = await active_users.all()
+```
 
 ### Select rows and mappings
 
@@ -463,7 +517,7 @@ from contextvars import ContextVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlarec.asyncio import AsyncBaseModel, new_async_session
+from sqlarec.asyncio import AsyncBaseModel, new_async_session_from_engine
 
 
 current_session = ContextVar[AsyncSession]("current_session")
@@ -471,7 +525,7 @@ AsyncBaseModel.register_session_provider(current_session.get)
 
 
 async def database_middleware(request, handler):
-    async with new_async_session() as session:
+    async with new_async_session_from_engine(engine) as session:
         token = current_session.set(session)
         try:
             response = await handler(request)
@@ -524,13 +578,13 @@ Install all development dependencies:
 uv sync
 ```
 
-| Command | Purpose |
-| --- | --- |
-| `make test` | Run synchronous and asynchronous tests. |
-| `make lint` | Check source and tests with Ruff. |
-| `make typecheck` | Check source and tests with Astral ty. |
-| `make format` | Format source and tests with Ruff. |
-| `make clean` | Remove Python, pytest, and Ruff caches. |
+| Command            | Purpose                                 |
+| ------------------ | --------------------------------------- |
+| `make test`      | Run synchronous and asynchronous tests. |
+| `make lint`      | Check source and tests with Ruff.       |
+| `make typecheck` | Check source and tests with Astral ty.  |
+| `make format`    | Format source and tests with Ruff.      |
+| `make clean`     | Remove Python, pytest, and Ruff caches. |
 
 ## Current limitations
 

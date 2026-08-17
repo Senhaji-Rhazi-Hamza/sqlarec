@@ -12,7 +12,7 @@ from sqlarec.core import (
     RowQuery,
     RowUpdate,
 )
-from sqlarec.database import get_engine, init_engine, new_session
+from sqlarec.database import new_session_from_engine
 
 __all__ = [
     "ActiveRecordMixin",
@@ -21,9 +21,7 @@ __all__ = [
     "ModelUpdate",
     "RowQuery",
     "RowUpdate",
-    "get_engine",
-    "init_engine",
-    "new_session",
+    "new_session_from_engine",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

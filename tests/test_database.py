@@ -1,35 +1,34 @@
-"""Tests for public engine and session helpers."""
+"""Tests for the public synchronous session helper."""
 
-import pytest
-from sqlalchemy.engine import Engine
+from sqlalchemy import create_engine
 
-import sqlarec.database as database
-from sqlarec import get_engine, init_engine, new_session
+from sqlarec import new_session_from_engine
 
 
-def test_get_engine_requires_initialization(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(database, "_engine", None)
+def test_new_session_from_engine_uses_sqlarec_defaults() -> None:
+    engine = create_engine("sqlite:///:memory:")
 
-    with pytest.raises(RuntimeError, match="init_engine"):
-        get_engine()
-
-
-def test_init_engine_registers_default_engine() -> None:
-    engine = init_engine("sqlite:///:memory:")
-
-    assert isinstance(engine, Engine)
-    assert get_engine() is engine
-    engine.dispose()
-
-
-def test_new_session_uses_supplied_engine() -> None:
-    engine = init_engine("sqlite:///:memory:")
-
-    with new_session(engine) as session:
+    with new_session_from_engine(engine) as session:
         assert session.get_bind() is engine
         assert session.autoflush is False
         assert session.expire_on_commit is False
+
+    engine.dispose()
+
+
+def test_new_session_from_engine_forwards_sessionmaker_options() -> None:
+    engine = create_engine("sqlite:///:memory:")
+
+    with new_session_from_engine(
+        engine,
+        autoflush=True,
+        expire_on_commit=True,
+        autobegin=False,
+        info={"scope": "test"},
+    ) as session:
+        assert session.autoflush is True
+        assert session.expire_on_commit is True
+        assert session.autobegin is False
+        assert session.info == {"scope": "test"}
 
     engine.dispose()

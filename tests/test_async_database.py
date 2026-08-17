@@ -1,35 +1,34 @@
-"""Tests for public asynchronous engine and session helpers."""
+"""Tests for the public asynchronous session helper."""
 
-import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import create_async_engine
 
-import sqlarec.asyncio.database as database
-from sqlarec.asyncio import (
-    get_async_engine,
-    init_async_engine,
-    new_async_session,
-)
+from sqlarec.asyncio import new_async_session_from_engine
 
 
-def test_get_async_engine_requires_initialization(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(database, "_async_engine", None)
+async def test_new_async_session_from_engine_uses_sqlarec_defaults() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
 
-    with pytest.raises(RuntimeError, match="init_async_engine"):
-        get_async_engine()
-
-
-@pytest.mark.asyncio
-async def test_async_engine_and_session_helpers() -> None:
-    engine = init_async_engine("sqlite+aiosqlite:///:memory:")
-
-    assert isinstance(engine, AsyncEngine)
-    assert get_async_engine() is engine
-
-    async with new_async_session() as session:
+    async with new_async_session_from_engine(engine) as session:
         assert session.bind is engine
         assert session.autoflush is False
         assert session.sync_session.expire_on_commit is False
+
+    await engine.dispose()
+
+
+async def test_new_async_session_from_engine_forwards_sessionmaker_options() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+
+    async with new_async_session_from_engine(
+        engine,
+        autoflush=True,
+        expire_on_commit=True,
+        autobegin=False,
+        info={"scope": "test"},
+    ) as session:
+        assert session.autoflush is True
+        assert session.sync_session.expire_on_commit is True
+        assert session.sync_session.autobegin is False
+        assert session.info == {"scope": "test"}
 
     await engine.dispose()

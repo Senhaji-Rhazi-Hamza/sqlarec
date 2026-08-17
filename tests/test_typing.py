@@ -3,9 +3,17 @@
 from collections.abc import Sequence
 from typing import assert_type
 
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.orm import Session
+
 from conftest import AsyncUser, User
-from sqlarec import ActiveRecordMixin, ModelQuery
-from sqlarec.asyncio import AsyncActiveRecordMixin, AsyncModelQuery
+from sqlarec import ActiveRecordMixin, ModelQuery, new_session_from_engine
+from sqlarec.asyncio import (
+    AsyncActiveRecordMixin,
+    AsyncModelQuery,
+    new_async_session_from_engine,
+)
 
 
 class ImperativeUser(ActiveRecordMixin):
@@ -14,6 +22,14 @@ class ImperativeUser(ActiveRecordMixin):
 
 class AsyncImperativeUser(AsyncActiveRecordMixin):
     pass
+
+
+def _check_session_helper_types(
+    engine: Engine,
+    async_engine: AsyncEngine,
+) -> None:
+    assert_type(new_session_from_engine(engine), Session)
+    assert_type(new_async_session_from_engine(async_engine), AsyncSession)
 
 
 def _check_sync_types() -> None:
