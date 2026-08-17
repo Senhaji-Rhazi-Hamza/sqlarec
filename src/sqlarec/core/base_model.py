@@ -50,15 +50,20 @@ class ActiveRecordMixin(_ModelMixin):
 
     @classmethod
     def _get_session_provider(cls) -> Callable[[], Session]:
-        """Return the provider inherited by this model base."""
-        provider = cls._session_provider
-        if provider is None:
-            raise RuntimeError(
-                "No session provider registered. Call "
-                "ActiveRecordMixin.register_session_provider() or register it "
-                "on an abstract model base at app startup."
-            )
-        return provider
+        """Return a callable that resolves the provider when executed."""
+
+        def resolve() -> Session:
+            provider = cls._session_provider
+            if provider is None:
+                raise RuntimeError(
+                    "No session provider registered. Call "
+                    "ActiveRecordMixin.register_session_provider() or register it "
+                    "on an abstract model base at app startup. Query and update "
+                    "builders may instead use with_session() before execution."
+                )
+            return provider()
+
+        return resolve
 
     @_ClassProperty
     def session(cls) -> Session:
@@ -67,14 +72,7 @@ class ActiveRecordMixin(_ModelMixin):
         Raises:
             RuntimeError: If no session provider has been registered.
         """
-        provider = cls._session_provider
-        if provider is None:
-            raise RuntimeError(
-                "No session provider registered. Call "
-                "ActiveRecordMixin.register_session_provider() or register it "
-                "on an abstract model base at app startup."
-            )
-        return provider()
+        return cls._get_session_provider()()
 
     @overload
     @classmethod

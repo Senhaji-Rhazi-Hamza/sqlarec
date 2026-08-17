@@ -54,15 +54,20 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
 
     @classmethod
     def _get_session_provider(cls) -> Callable[[], AsyncSession]:
-        """Return the provider inherited by this async model base."""
-        provider = cls._session_provider
-        if provider is None:
-            raise RuntimeError(
-                "No async session provider registered. Call "
-                "AsyncActiveRecordMixin.register_session_provider() or register "
-                "it on an abstract model base at app startup."
-            )
-        return provider
+        """Return a callable that resolves the provider when executed."""
+
+        def resolve() -> AsyncSession:
+            provider = cls._session_provider
+            if provider is None:
+                raise RuntimeError(
+                    "No async session provider registered. Call "
+                    "AsyncActiveRecordMixin.register_session_provider() or register "
+                    "it on an abstract model base at app startup. Query and update "
+                    "builders may instead use with_session() before execution."
+                )
+            return provider()
+
+        return resolve
 
     @_ClassProperty
     def session(cls) -> AsyncSession:

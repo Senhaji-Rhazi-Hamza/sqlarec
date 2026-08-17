@@ -113,6 +113,42 @@ async def test_async_builders_resolve_the_session_when_executed() -> None:
         await engine_b.dispose()
 
 
+async def test_async_builders_use_explicit_session_without_provider(
+    async_session: AsyncSession,
+) -> None:
+    previous_provider = AsyncBaseModel._session_provider
+    AsyncBaseModel._session_provider = None
+
+    try:
+        async_session.add(
+            AsyncUser(
+                name="Hamza",
+                email="hamza@example.com",
+                active=False,
+            )
+        )
+        await async_session.flush()
+
+        query = AsyncUser.query.filter_by(email="hamza@example.com")
+        rows = AsyncUser.select(AsyncUser.name).where(
+            AsyncUser.email == "hamza@example.com"
+        )
+        user_update = AsyncUser.update().where(AsyncUser.email == "hamza@example.com")
+
+        assert (await query.with_session(async_session).one()).name == "Hamza"
+        assert await rows.with_session(async_session).one() == ("Hamza",)
+        result = await (
+            user_update.with_session(async_session).values(active=True).execute()
+        )
+        assert result.rowcount == 1
+        assert (await query.with_session(async_session).one()).active
+
+        with pytest.raises(RuntimeError, match="register_session_provider"):
+            await AsyncUser.query.all()
+    finally:
+        AsyncBaseModel._session_provider = previous_provider
+
+
 async def test_async_create_query_save_and_delete(
     async_session: AsyncSession,
 ) -> None:

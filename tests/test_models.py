@@ -86,6 +86,38 @@ def test_builders_resolve_the_session_when_executed() -> None:
         engine_b.dispose()
 
 
+def test_builders_use_explicit_session_without_provider(session: Session) -> None:
+    previous_provider = BaseModel._session_provider
+    BaseModel._session_provider = None
+
+    try:
+        session.add(
+            User(
+                name="Hamza",
+                email="hamza@example.com",
+                active=False,
+            )
+        )
+        session.flush()
+
+        query = User.query.filter_by(email="hamza@example.com")
+        rows = User.select(User.name).where(User.email == "hamza@example.com")
+        user_update = User.update().where(User.email == "hamza@example.com")
+
+        assert query.with_session(session).one().name == "Hamza"
+        assert rows.with_session(session).one() == ("Hamza",)
+        assert (
+            user_update.with_session(session).values(active=True).execute().rowcount
+            == 1
+        )
+        assert query.with_session(session).one().active
+
+        with pytest.raises(RuntimeError, match="register_session_provider"):
+            User.query.all()
+    finally:
+        BaseModel._session_provider = previous_provider
+
+
 def test_create_flushes_without_committing(session: Session) -> None:
     user = User.create(name="Hamza", email="hamza@example.com")
 
