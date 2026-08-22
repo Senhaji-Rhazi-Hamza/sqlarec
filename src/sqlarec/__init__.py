@@ -11,6 +11,7 @@ from sqlarec.core import (
     ModelUpdate,
     RowQuery,
     RowUpdate,
+    select_rows,
 )
 from sqlarec.database import new_session_from_engine
 
@@ -22,6 +23,7 @@ __all__ = [
     "RowQuery",
     "RowUpdate",
     "new_session_from_engine",
+    "select_rows",
 ]
 
-__version__ = "0.4.3"
+__version__ = "0.5.0"

@@ -8,12 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import Session
 
 from conftest import AsyncUser, User
-from sqlarec import ActiveRecordMixin, ModelQuery, new_session_from_engine
+from sqlarec import (
+    ActiveRecordMixin,
+    ModelQuery,
+    RowQuery,
+    new_session_from_engine,
+    select_rows,
+)
 from sqlarec.asyncio import (
     AsyncActiveRecordMixin,
     AsyncModelQuery,
+    AsyncRowQuery,
     new_async_session_from_engine,
 )
+from sqlarec.asyncio import select_rows as select_async_rows
 
 
 class ImperativeUser(ActiveRecordMixin):
@@ -36,6 +44,7 @@ def _check_sync_types(session: Session) -> None:
     assert_type(User.query, ModelQuery[User])
     assert_type(User.query.all(), Sequence[User])
     assert_type(User.query.exists(), bool)
+    assert_type(select_rows(User.id, User.email), RowQuery)
     assert_type(User.create(name="Hamza", email="hamza@example.com"), User)
     assert_type(
         User.create_with_session(session, name="Hamza", email="hamza@example.com"),
@@ -49,6 +58,7 @@ async def _check_async_types(async_session: AsyncSession) -> None:
     assert_type(AsyncUser.query, AsyncModelQuery[AsyncUser])
     assert_type(await AsyncUser.query.all(), Sequence[AsyncUser])
     assert_type(await AsyncUser.query.exists(), bool)
+    assert_type(select_async_rows(AsyncUser.id, AsyncUser.email), AsyncRowQuery)
     assert_type(
         await AsyncUser.create(name="Hamza", email="hamza@example.com"),
         AsyncUser,

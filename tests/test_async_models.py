@@ -15,6 +15,7 @@ from sqlarec.asyncio import (
     AsyncModelUpdate,
     AsyncRowQuery,
     AsyncRowUpdate,
+    select_rows,
 )
 
 
@@ -256,6 +257,25 @@ async def test_async_query_exists_returns_boolean(
         .where(AsyncUser.name == "Missing")
         .exists()
     )
+
+
+async def test_async_standalone_row_query_binds_session_at_execution(
+    async_session: AsyncSession,
+) -> None:
+    user = await AsyncUser.create(name="Hamza", email="hamza@example.com")
+    query = select_rows(AsyncUser.id, AsyncUser.email).where(AsyncUser.id == user.id)
+
+    assert isinstance(query, AsyncRowQuery)
+    assert query.statement.column_descriptions[0]["expr"] is AsyncUser.id
+    assert query.compile() is not None
+
+    with pytest.raises(RuntimeError, match="with_session"):
+        await query.one()
+
+    assert await query.with_session(async_session).one() == (user.id, user.email)
+
+    with pytest.raises(RuntimeError, match="with_session"):
+        await query.one()
 
 
 async def test_async_union_preserves_entities(async_session: AsyncSession) -> None:

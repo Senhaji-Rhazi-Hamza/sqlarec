@@ -1,9 +1,10 @@
 """Tests for public query and update wrappers."""
 
+import pytest
 from sqlalchemy.orm import Session
 
 from conftest import User
-from sqlarec import ModelQuery, ModelUpdate, RowQuery, RowUpdate
+from sqlarec import ModelQuery, ModelUpdate, RowQuery, RowUpdate, select_rows
 
 
 def test_model_query_is_immutable_and_returns_models(session: Session) -> None:
@@ -38,6 +39,23 @@ def test_query_exists_returns_boolean_for_models_and_rows(session: Session) -> N
     assert not User.query.filter_by(email="missing@example.com").exists()
     assert User.select(User.id).where(User.name == "Hamza").exists()
     assert not User.select(User.id).where(User.name == "Missing").exists()
+
+
+def test_standalone_row_query_binds_session_at_execution(session: Session) -> None:
+    user = User.create(name="Hamza", email="hamza@example.com")
+    query = select_rows(User.id, User.email).where(User.id == user.id)
+
+    assert isinstance(query, RowQuery)
+    assert query.statement.column_descriptions[0]["expr"] is User.id
+    assert query.compile() is not None
+
+    with pytest.raises(RuntimeError, match="with_session"):
+        query.one()
+
+    assert query.with_session(session).one() == (user.id, user.email)
+
+    with pytest.raises(RuntimeError, match="with_session"):
+        query.one()
 
 
 def test_model_query_union_preserves_entity_results(session: Session) -> None:

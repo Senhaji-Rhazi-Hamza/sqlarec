@@ -402,6 +402,46 @@ In async code, await the result:
 has_active_users = await AsyncUser.query.where(AsyncUser.active.is_(True)).exists()
 ```
 
+### Select rows without a model context
+
+Use `select_rows()` when a selection does not naturally belong to one model.
+Standalone selections are not connected to a registered provider, so bind the
+session explicitly before execution:
+
+```python
+from sqlalchemy import func
+from sqlarec import select_rows
+
+
+active_summary = (
+    select_rows(User.active, func.count(User.id).label("total"))
+    .where(User.email.endswith("@example.com"))
+    .group_by(User.active)
+    .with_session(session)
+    .all()
+)
+
+database_time = (
+    select_rows(func.current_timestamp().label("database_time"))
+    .with_session(session)
+    .one()
+)
+```
+
+The query remains immutable and exposes the same builder methods and
+`statement` property as `Model.select()`. It can be constructed, extended, or
+compiled before a session is bound. Executing it without `with_session()`
+raises a `RuntimeError`.
+
+Import the async factory from `sqlarec.asyncio` and await its result methods:
+
+```python
+from sqlarec.asyncio import select_rows
+
+
+rows = await select_rows(User.id, User.email).with_session(async_session).all()
+```
+
 ### Override the session for one builder
 
 Queries and updates normally resolve the session from the model's registered

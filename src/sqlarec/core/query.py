@@ -19,11 +19,13 @@ class Query(Generic[SessionT]):
     def __init__(
         self,
         statement: Any,
-        session: SessionT | Callable[[], SessionT],
+        session: SessionT | Callable[[], SessionT] | None = None,
     ) -> None:
-        """Initialize a query with a session or context-aware provider."""
+        """Initialize a query with an optional session or session provider."""
         self.statement = statement
-        if callable(session):
+        if session is None:
+            self._session_provider: Callable[[], SessionT] | None = None
+        elif callable(session):
             self._session_provider = cast(Callable[[], SessionT], session)
         else:
             self._session_provider = lambda: session
@@ -31,7 +33,13 @@ class Query(Generic[SessionT]):
     @property
     def session(self) -> SessionT:
         """Resolve and return the session for the current execution context."""
-        return self._session_provider()
+        provider = self._session_provider
+        if provider is None:
+            raise RuntimeError(
+                "No session bound to this query. Call with_session() before "
+                "executing it."
+            )
+        return provider()
 
     def _new(self, statement: Any) -> Self:
         return self.__class__(statement, self._session_provider)
@@ -193,6 +201,11 @@ class RowQuery(Query[Session]):
     def mappings(self) -> MappingResult:
         """Execute the statement and return mapping-style rows."""
         return self.execute().mappings()
+
+
+def select_rows(*entities: Any) -> RowQuery:
+    """Create an unbound row query from SQLAlchemy entities and expressions."""
+    return RowQuery(select(*entities))
 
 
 class _ModelQueryProperty:

@@ -98,6 +98,11 @@ class AsyncRowQuery(Query[AsyncSession]):
         return (await self.execute()).mappings()
 
 
+def select_rows(*entities: Any) -> AsyncRowQuery:
+    """Create an unbound async row query from entities and expressions."""
+    return AsyncRowQuery(select(*entities))
+
+
 class _AsyncModelQueryProperty:
     """Descriptor that creates a fresh async model query on every access."""
 
