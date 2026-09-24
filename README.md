@@ -514,8 +514,17 @@ users = User.all()
 
 user = User.get_instance_by_keys(email="hamza@example.com")
 users = User.filter_by_keys(active=True)
-user = User.get_or_create(email="hamza@example.com", name="Hamza")
+user = User.get_or_create(email="hamza@example.com", defaults={"name": "Hamza"})
 ```
+
+`get_or_create()` looks a model up using its keyword arguments only. Values that
+should be applied when creating a new model, but that must not narrow the
+lookup, belong in `defaults`. The example above finds the account with that
+email whatever its name, and only uses `"Hamza"` when inserting a new row.
+
+The lookup and the insert are not atomic. Concurrent callers can both miss and
+then insert, so rely on a unique constraint and handle the resulting
+`IntegrityError`.
 
 Models also provide primary-key and serialization helpers:
 
@@ -524,6 +533,32 @@ Models also provide primary-key and serialization helpers:
 - `get_primary_key_names()`
 - `has_one_primary_key()`
 - `to_dict()`
+
+`to_dict()` is keyed by mapped attribute name, so it includes columns inherited
+from a parent mapper and uses the attribute name for renamed columns. Reading an
+expired or deferred attribute loads it, so in asynchronous code the instance
+must already be fully loaded.
+
+`repr()` is built only from already-loaded state and never queries the database.
+Attributes that are expired, deferred, or never set render as `<not loaded>`,
+which keeps logging safe on detached and asynchronous instances.
+
+### Generated primary keys
+
+`create()` generates a primary key when the model has a single primary-key
+column with no supplied value, no auto-increment behavior, and no default, and
+when the column type can hold a generated identifier:
+
+| Primary-key column type | Generated value |
+| --- | --- |
+| `Uuid` | a `uuid.UUID` |
+| `Uuid(as_uuid=False)` | a 32-character hex string |
+| `String`/`Text` with no length or a length of at least 32 | a 32-character hex string |
+| any other type, or a primary key that is also a foreign key | nothing is generated |
+
+When nothing is generated the value is left for SQLAlchemy or the database to
+report as missing, rather than being filled with an identifier the column cannot
+store.
 
 ### Return values from updates
 

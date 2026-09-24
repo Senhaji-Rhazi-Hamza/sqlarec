@@ -98,8 +98,12 @@ class ActiveRecordMixin(_ModelMixin):
     def create(cls, **values: Any) -> Self:
         """Construct, add, and flush a model without committing.
 
-        A string-compatible single primary key receives a UUID hex identifier
-        when it has no supplied value, auto-increment behavior, or default.
+        A single primary key with no supplied value, auto-increment behavior, or
+        default receives a generated identifier when its column type can hold
+        one: a UUID column receives a UUID, and a string column with room for 32
+        characters receives a UUID hex string. Any other primary-key type, and a
+        primary key that is also a foreign key, is left for SQLAlchemy or the
+        database to report as missing.
         """
         return cls.create_instance(**cls._prepare_create_values(values))
 
@@ -148,14 +152,32 @@ class ActiveRecordMixin(_ModelMixin):
         return cls.get_by_pk(value) is not None
 
     @classmethod
-    def get_or_create(cls, **values: Any) -> Self:
-        """Return a matching model or create and flush a new one."""
-        identity = cls._identity_from_values(values)
+    def get_or_create(
+        cls,
+        defaults: dict[str, Any] | None = None,
+        **lookup: Any,
+    ) -> Self:
+        """Return a model matching ``lookup`` or create and flush a new one.
+
+        Args:
+            defaults: Values applied only when a new model is created. They are
+                merged over ``lookup`` and never take part in the lookup.
+            **lookup: Mapped attribute values used to find an existing model,
+                and, unless overridden by ``defaults``, to create a new one.
+
+        Note:
+            The lookup and the insert are not atomic. Concurrent callers can both
+            miss and then insert, so rely on a unique constraint and handle the
+            resulting ``IntegrityError``.
+        """
+        identity = cls._identity_from_values(lookup)
         if identity is not None:
             instance = cls.get_by_pk(identity)
         else:
-            instance = cls.get_instance_by_keys(**values)
-        return cls.create(**values) if instance is None else instance
+            instance = cls.get_instance_by_keys(**lookup)
+        if instance is not None:
+            return instance
+        return cls.create(**{**lookup, **(defaults or {})})
 
     @classmethod
     def all(cls) -> Sequence[Self]:
