@@ -84,7 +84,7 @@ class _ModelMixin:
         )
 
     @classmethod
-    def _prepare_create_values(cls, values: dict[str, Any]) -> dict[str, Any]:
+    def _prepare_create_values(cls, **values: Any) -> dict[str, Any]:
         """Return creation values with a generated identifier when required.
 
         An identifier is only generated when the primary-key column type can
@@ -92,18 +92,17 @@ class _ModelMixin:
         foreign keys, are left untouched so that SQLAlchemy or the database
         reports the missing value.
         """
-        prepared = values.copy()
         if (
             cls.has_one_primary_key()
-            and cls.get_primary_key_name() not in prepared
+            and cls.get_primary_key_name() not in values
             and not cls.is_auto_increment()
             and not cls.has_primary_key_default()
         ):
             primary_key = cast(Column[Any], cls._mapper().primary_key[0])
             identifier = generate_identifier_for_column(primary_key)
             if identifier is not None:
-                prepared[cls.get_primary_key_name()] = identifier
-        return prepared
+                return {**values, cls.get_primary_key_name(): identifier}
+        return values
 
     def to_dict(self) -> dict[str, Any]:
         """Return mapped column values keyed by mapped attribute name.

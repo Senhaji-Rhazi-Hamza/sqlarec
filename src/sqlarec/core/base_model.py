@@ -105,7 +105,7 @@ class ActiveRecordMixin(_ModelMixin):
         primary key that is also a foreign key, is left for SQLAlchemy or the
         database to report as missing.
         """
-        return cls.create_instance(**cls._prepare_create_values(values))
+        return cls.create_instance(**cls._prepare_create_values(**values))
 
     @classmethod
     def create_with_session(
@@ -115,7 +115,7 @@ class ActiveRecordMixin(_ModelMixin):
         **values: Any,
     ) -> Self:
         """Construct, add, and flush a model through an explicit session."""
-        instance = cls(**cls._prepare_create_values(values))
+        instance = cls(**cls._prepare_create_values(**values))
         session.add(instance)
         session.flush()
         return instance

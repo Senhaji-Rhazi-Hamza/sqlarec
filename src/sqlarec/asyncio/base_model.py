@@ -109,7 +109,7 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
         primary key that is also a foreign key, is left for SQLAlchemy or the
         database to report as missing.
         """
-        return await cls.create_instance(**cls._prepare_create_values(values))
+        return await cls.create_instance(**cls._prepare_create_values(**values))
 
     @classmethod
     async def create_with_session(
@@ -119,7 +119,7 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
         **values: Any,
     ) -> Self:
         """Construct, add, and flush through an explicit async session."""
-        instance = cls(**cls._prepare_create_values(values))
+        instance = cls(**cls._prepare_create_values(**values))
         session.add(instance)
         await session.flush()
         return instance
