@@ -100,7 +100,15 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
 
     @classmethod
     async def create(cls, **values: Any) -> Self:
-        """Construct, add, and flush a model without committing."""
+        """Construct, add, and flush a model without committing.
+
+        A single primary key with no supplied value, auto-increment behavior, or
+        default receives a generated identifier when its column type can hold
+        one: a UUID column receives a UUID, and a string column with room for 32
+        characters receives a UUID hex string. Any other primary-key type, and a
+        primary key that is also a foreign key, is left for SQLAlchemy or the
+        database to report as missing.
+        """
         return await cls.create_instance(**cls._prepare_create_values(values))
 
     @classmethod
@@ -148,14 +156,32 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
         return await cls.get_by_pk(value) is not None
 
     @classmethod
-    async def get_or_create(cls, **values: Any) -> Self:
-        """Return a matching model or create and flush a new one."""
-        identity = cls._identity_from_values(values)
+    async def get_or_create(
+        cls,
+        defaults: dict[str, Any] | None = None,
+        **lookup: Any,
+    ) -> Self:
+        """Return a model matching ``lookup`` or create and flush a new one.
+
+        Args:
+            defaults: Values applied only when a new model is created. They are
+                merged over ``lookup`` and never take part in the lookup.
+            **lookup: Mapped attribute values used to find an existing model,
+                and, unless overridden by ``defaults``, to create a new one.
+
+        Note:
+            The lookup and the insert are not atomic. Concurrent callers can both
+            miss and then insert, so rely on a unique constraint and handle the
+            resulting ``IntegrityError``.
+        """
+        identity = cls._identity_from_values(lookup)
         if identity is not None:
             instance = await cls.get_by_pk(identity)
         else:
-            instance = await cls.get_instance_by_keys(**values)
-        return await cls.create(**values) if instance is None else instance
+            instance = await cls.get_instance_by_keys(**lookup)
+        if instance is not None:
+            return instance
+        return await cls.create(**{**lookup, **(defaults or {})})
 
     @classmethod
     async def all(cls) -> Sequence[Self]:

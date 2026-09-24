@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from sqlalchemy import Integer, inspect
+from sqlalchemy import Column, Integer, inspect
 from sqlalchemy import Sequence as SQLSequence
-from sqlalchemy.orm import Mapper
+from sqlalchemy.orm import InstanceState, Mapper
 
-from sqlarec.utils import generate_identifier
+from sqlarec.utils import generate_identifier_for_column
 
 
 class _ModelMixin:
@@ -85,7 +85,13 @@ class _ModelMixin:
 
     @classmethod
     def _prepare_create_values(cls, values: dict[str, Any]) -> dict[str, Any]:
-        """Return creation values with a generated identifier when required."""
+        """Return creation values with a generated identifier when required.
+
+        An identifier is only generated when the primary-key column type can
+        hold one. Columns of any other type, and primary keys that are also
+        foreign keys, are left untouched so that SQLAlchemy or the database
+        reports the missing value.
+        """
         prepared = values.copy()
         if (
             cls.has_one_primary_key()
@@ -93,18 +99,40 @@ class _ModelMixin:
             and not cls.is_auto_increment()
             and not cls.has_primary_key_default()
         ):
-            prepared[cls.get_primary_key_name()] = generate_identifier()
+            primary_key = cast(Column[Any], cls._mapper().primary_key[0])
+            identifier = generate_identifier_for_column(primary_key)
+            if identifier is not None:
+                prepared[cls.get_primary_key_name()] = identifier
         return prepared
 
     def to_dict(self) -> dict[str, Any]:
-        """Return mapped column values keyed by column name."""
-        table = cast(Any, self).__table__
-        return {column.key: getattr(self, column.key) for column in table.columns}
+        """Return mapped column values keyed by mapped attribute name.
+
+        Keys are the mapper's attribute names, so inherited columns are
+        included and renamed attributes appear under the name they are mapped
+        to rather than the underlying column name.
+
+        Reading an expired or deferred attribute loads it from the database. In
+        asynchronous code the instance must therefore already be fully loaded,
+        otherwise SQLAlchemy raises ``MissingGreenlet``.
+        """
+        return {
+            attr.key: getattr(self, attr.key) for attr in self._mapper().column_attrs
+        }
 
     def __repr__(self) -> str:
-        table = cast(Any, self).__table__
+        """Return a representation built only from already-loaded state.
+
+        The representation never queries the database, so it is safe on
+        transient, detached, expired, and asynchronous instances. Attributes
+        that are not loaded are rendered as ``<not loaded>``.
+        """
+        loaded = cast(InstanceState[Any], inspect(self)).dict
         values = ", ".join(
-            f"{column.key}={getattr(self, column.key)!r}" for column in table.columns
+            f"{attr.key}={loaded[attr.key]!r}"
+            if attr.key in loaded
+            else f"{attr.key}=<not loaded>"
+            for attr in self._mapper().column_attrs
         )
         return f"{type(self).__name__}({values})"
 
