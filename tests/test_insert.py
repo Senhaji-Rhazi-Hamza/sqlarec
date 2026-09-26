@@ -78,9 +78,9 @@ def test_insert_preserves_supplied_mappings_without_generating_identifiers() -> 
     assert StringKeyedRecord.insert().values([{"name": "sync"}]).parameters == (
         {"name": "sync"},
     )
-    assert AsyncStringKeyedRecord.insert().values(
-        [{"name": "async"}]
-    ).parameters == ({"name": "async"},)
+    assert AsyncStringKeyedRecord.insert().values([{"name": "async"}]).parameters == (
+        {"name": "async"},
+    )
 
 
 def test_insert_can_use_an_explicit_session_without_provider(
@@ -117,9 +117,7 @@ async def test_async_insert_returns_mapping_rows(
     async_session: AsyncSession,
 ) -> None:
     row_insert = (
-        AsyncUser.insert()
-        .values(_user_rows())
-        .returning(AsyncUser.id, AsyncUser.email)
+        AsyncUser.insert().values(_user_rows()).returning(AsyncUser.id, AsyncUser.email)
     )
 
     rows = await row_insert.mappings()

@@ -116,12 +116,8 @@ class UpsertBuilder(Generic[SessionT]):
             self._returning_expressions
             if returning_expressions is None
             else returning_expressions,
-            self._returning_options
-            if returning_options is None
-            else returning_options,
-            self._execution_options
-            if execution_options is None
-            else execution_options,
+            self._returning_options if returning_options is None else returning_options,
+            self._execution_options if execution_options is None else execution_options,
         )
 
     def with_session(self, session: SessionT) -> Self:
@@ -188,8 +184,7 @@ class UpsertBuilder(Generic[SessionT]):
         if invalid:
             joined = ", ".join(sorted(invalid))
             raise ValueError(
-                "Primary-key and conflict attributes cannot be updated: "
-                f"{joined}."
+                f"Primary-key and conflict attributes cannot be updated: {joined}."
             )
         return self._copy(update_attributes=names)
 
@@ -269,8 +264,7 @@ class UpsertBuilder(Generic[SessionT]):
                 index.unique
                 and not has_predicate
                 and all(
-                    isinstance(expression, Column)
-                    for expression in index.expressions
+                    isinstance(expression, Column) for expression in index.expressions
                 )
             ):
                 unique_targets.add(frozenset(index.columns))
@@ -300,8 +294,7 @@ class UpsertBuilder(Generic[SessionT]):
         if invalid_updates:
             joined = ", ".join(sorted(invalid_updates))
             raise ValueError(
-                "Primary-key and conflict attributes cannot be updated: "
-                f"{joined}."
+                f"Primary-key and conflict attributes cannot be updated: {joined}."
             )
 
         keys = set(self._parameters[0])
@@ -316,6 +309,7 @@ class UpsertBuilder(Generic[SessionT]):
             joined = ", ".join(sorted(missing_updates))
             raise ValueError(f"Every upsert row must contain update values: {joined}.")
         return self._parameters
+
 
 class Upsert(UpsertBuilder[Session]):
     """Execute an upsert or select a typed returning wrapper."""

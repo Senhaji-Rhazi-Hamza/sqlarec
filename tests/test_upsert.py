@@ -48,10 +48,7 @@ def _rows() -> list[dict[str, Any]]:
 
 def _user_upsert() -> Upsert:
     return (
-        User.upsert()
-        .values(_rows())
-        .on_conflict(User.email)
-        .update_existing(User.name)
+        User.upsert().values(_rows()).on_conflict(User.email).update_existing(User.name)
     )
 
 
@@ -119,9 +116,11 @@ def test_upsert_supports_composite_conflict_targets(session: Session) -> None:
     )
     builder.execute()
 
-    membership = builder.values(
-        [{"organization_id": 1, "user_id": 2, "role": "owner"}]
-    ).returning(Membership).one()
+    membership = (
+        builder.values([{"organization_id": 1, "user_id": 2, "role": "owner"}])
+        .returning(Membership)
+        .one()
+    )
 
     assert membership.role == "owner"
     assert Membership.query.one().role == "owner"
@@ -275,10 +274,7 @@ def test_upsert_requires_conflict_and_update_values(session: Session) -> None:
 def test_upsert_parameters_are_immutable_copies(session: Session) -> None:
     rows = _rows()
     builder = (
-        User.upsert()
-        .values(rows)
-        .on_conflict(User.email)
-        .update_existing(User.name)
+        User.upsert().values(rows).on_conflict(User.email).update_existing(User.name)
     )
     rows[0]["name"] = "Changed outside"
     exposed = builder.parameters
@@ -363,9 +359,9 @@ def test_upsert_builds_postgresql_statement(session: Session) -> None:
         def get_bind(self, **kwargs: Any) -> PostgreSQLBind:
             return PostgreSQLBind()
 
-    statement = _user_upsert().with_session(
-        cast(Session, PostgreSQLSession())
-    ).statement
+    statement = (
+        _user_upsert().with_session(cast(Session, PostgreSQLSession())).statement
+    )
     compiled = str(statement.compile(dialect=postgresql.dialect()))
 
     assert "ON CONFLICT (email) DO UPDATE" in compiled
@@ -399,15 +395,12 @@ async def test_async_upsert_inserts_updates_and_returns_models(
     )
     await builder.execute()
 
-    result = (
-        builder.values(
-            [
-                {"name": "Hamza S.", "email": "hamza@example.com"},
-                {"name": "Third", "email": "third@example.com"},
-            ]
-        )
-        .returning(AsyncUser)
-    )
+    result = builder.values(
+        [
+            {"name": "Hamza S.", "email": "hamza@example.com"},
+            {"name": "Third", "email": "third@example.com"},
+        ]
+    ).returning(AsyncUser)
     users = await result.all()
 
     assert isinstance(builder, AsyncUpsert)
@@ -450,8 +443,10 @@ async def test_async_upsert_supports_composite_targets(
     )
     await builder.execute()
 
-    membership = await builder.values(
-        [{"organization_id": 1, "user_id": 2, "role": "owner"}]
-    ).returning(AsyncMembership).one()
+    membership = (
+        await builder.values([{"organization_id": 1, "user_id": 2, "role": "owner"}])
+        .returning(AsyncMembership)
+        .one()
+    )
 
     assert membership.role == "owner"

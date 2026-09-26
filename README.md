@@ -298,12 +298,16 @@ await session.commit()
 Bulk inserts use the same mapping-only API:
 
 ```python
-await User.insert().values(
-    [
-        {"name": "Hamza", "email": "hamza@example.com"},
-        {"name": "Reader", "email": "reader@example.com"},
-    ]
-).execute()
+await (
+    User.insert()
+    .values(
+        [
+            {"name": "Hamza", "email": "hamza@example.com"},
+            {"name": "Reader", "email": "reader@example.com"},
+        ]
+    )
+    .execute()
+)
 await session.commit()
 ```
 
