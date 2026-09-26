@@ -93,6 +93,23 @@ session.commit()
 `create()` constructs the model, adds it to the current session, and flushes.
 The application decides when to commit.
 
+For statement-based bulk insertion, pass a non-empty iterable of mappings to
+the insert builder:
+
+```python
+User.insert().values(
+    [
+        {"name": "Hamza", "email": "hamza@example.com"},
+        {"name": "Reader", "email": "reader@example.com"},
+    ]
+).execute()
+session.commit()
+```
+
+Bulk mappings use mapped Python attribute names. Tuples and model instances are
+not accepted: use `session.add_all(models)` when inserting existing ORM
+instances. The insert executes in the current transaction and never commits.
+
 ### Read
 
 Query using mapped attributes:
@@ -225,6 +242,18 @@ Bulk updates are awaitable too:
 
 ```python
 result = await User.update().where(User.active.is_(False)).values(active=True).execute()
+await session.commit()
+```
+
+Bulk inserts use the same mapping-only API:
+
+```python
+await User.insert().values(
+    [
+        {"name": "Hamza", "email": "hamza@example.com"},
+        {"name": "Reader", "email": "reader@example.com"},
+    ]
+).execute()
 await session.commit()
 ```
 
@@ -560,11 +589,18 @@ When nothing is generated the value is left for SQLAlchemy or the database to
 report as missing, rather than being filled with an identifier the column cannot
 store.
 
-### Return values from updates
+### Return values from inserts and updates
 
 Use `returning()` when supported by the database:
 
 ```python
+inserted_users = (
+    User.insert()
+    .values([{"name": "Hamza", "email": "hamza@example.com"}])
+    .returning(User)
+    .all()
+)
+
 updated_users = (
     User.update()
     .where(User.active.is_(False))
@@ -574,10 +610,24 @@ updated_users = (
 )
 ```
 
+Return selected columns as mapping-style rows when full models are unnecessary:
+
+```python
+inserted_rows = (
+    User.insert()
+    .values([{"name": "Reader", "email": "reader@example.com"}])
+    .returning(User.id, User.email)
+    .mappings()
+    .all()
+)
+```
+
 ### Use the underlying SQLAlchemy statement
 
-Every query and update wrapper exposes `.statement`. Use it when SQLAlchemy
-supports an operation that the SQLARec wrapper does not expose directly.
+Every query, insert, and update wrapper exposes `.statement`. Use it when
+SQLAlchemy supports an operation that the SQLARec wrapper does not expose
+directly. Insert builders keep bulk mappings in `.parameters` and pass them
+separately at execution time so SQLAlchemy can use its optimized ORM bulk path.
 
 For example, add `with_for_update()` to a model query and execute the resulting
 SQLAlchemy statement with the registered session:

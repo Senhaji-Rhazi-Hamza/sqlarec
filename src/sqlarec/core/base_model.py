@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, ClassVar, Self, cast, overload
 
+from sqlalchemy import insert as sql_insert
 from sqlalchemy import inspect, select, update
 from sqlalchemy.orm import DeclarativeBase, InstanceState, Session
 
 from sqlarec.core.descriptors import _ClassProperty
+from sqlarec.core.insert import Insert
 from sqlarec.core.model import _ModelMixin
 from sqlarec.core.query import ModelQuery, RowQuery, _ModelQueryProperty
 from sqlarec.core.update import Update
@@ -93,6 +95,19 @@ class ActiveRecordMixin(_ModelMixin):
     def update(cls) -> Update:
         """Create an immutable update wrapper for this model."""
         return Update(update(cls), cls._get_session_provider())
+
+    @classmethod
+    def insert(cls) -> Insert:
+        """Create an immutable, mapping-based ORM bulk insert wrapper.
+
+        The insert executes within the resolved session's current transaction
+        and never commits it.
+        """
+
+        def prepare(values: Mapping[str, Any]) -> dict[str, Any]:
+            return cls._prepare_create_values(**values)
+
+        return Insert(sql_insert(cls), cls._get_session_provider(), prepare)
 
     @classmethod
     def create(cls, **values: Any) -> Self:

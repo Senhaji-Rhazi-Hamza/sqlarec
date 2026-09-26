@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, ClassVar, Self, cast, overload
 
+from sqlalchemy import insert as sql_insert
 from sqlalchemy import inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession
 from sqlalchemy.orm import DeclarativeBase, InstanceState
 
+from sqlarec.asyncio.insert import AsyncInsert
 from sqlarec.asyncio.query import (
     AsyncModelQuery,
     AsyncRowQuery,
@@ -97,6 +99,19 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
     def update(cls) -> AsyncUpdate:
         """Create an immutable asynchronous update wrapper."""
         return AsyncUpdate(update(cls), cls._get_session_provider())
+
+    @classmethod
+    def insert(cls) -> AsyncInsert:
+        """Create an immutable asynchronous ORM bulk insert wrapper.
+
+        The insert accepts mappings, executes within the resolved session's
+        current transaction, and never commits it.
+        """
+
+        def prepare(values: Mapping[str, Any]) -> dict[str, Any]:
+            return cls._prepare_create_values(**values)
+
+        return AsyncInsert(sql_insert(cls), cls._get_session_provider(), prepare)
 
     @classmethod
     async def create(cls, **values: Any) -> Self:

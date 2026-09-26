@@ -10,14 +10,20 @@ from sqlalchemy.orm import Session
 from conftest import AsyncUser, User
 from sqlarec import (
     ActiveRecordMixin,
+    Insert,
+    ModelInsert,
     ModelQuery,
+    RowInsert,
     RowQuery,
     new_session_from_engine,
     select_rows,
 )
 from sqlarec.asyncio import (
     AsyncActiveRecordMixin,
+    AsyncInsert,
+    AsyncModelInsert,
     AsyncModelQuery,
+    AsyncRowInsert,
     AsyncRowQuery,
     new_async_session_from_engine,
 )
@@ -42,6 +48,9 @@ def _check_session_helper_types(
 
 def _check_sync_types(session: Session) -> None:
     assert_type(User.query, ModelQuery[User])
+    assert_type(User.insert(), Insert)
+    assert_type(User.insert().values([]).returning(User), ModelInsert[User])
+    assert_type(User.insert().values([]).returning(User.id), RowInsert)
     assert_type(User.query.all(), Sequence[User])
     assert_type(User.query.exists(), bool)
     assert_type(select_rows(User.id, User.email), RowQuery)
@@ -56,6 +65,15 @@ def _check_sync_types(session: Session) -> None:
 
 async def _check_async_types(async_session: AsyncSession) -> None:
     assert_type(AsyncUser.query, AsyncModelQuery[AsyncUser])
+    assert_type(AsyncUser.insert(), AsyncInsert)
+    assert_type(
+        AsyncUser.insert().values([]).returning(AsyncUser),
+        AsyncModelInsert[AsyncUser],
+    )
+    assert_type(
+        AsyncUser.insert().values([]).returning(AsyncUser.id),
+        AsyncRowInsert,
+    )
     assert_type(await AsyncUser.query.all(), Sequence[AsyncUser])
     assert_type(await AsyncUser.query.exists(), bool)
     assert_type(select_async_rows(AsyncUser.id, AsyncUser.email), AsyncRowQuery)

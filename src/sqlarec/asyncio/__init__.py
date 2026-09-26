@@ -2,14 +2,18 @@
 
 from sqlarec.asyncio.base_model import AsyncActiveRecordMixin, AsyncBaseModel
 from sqlarec.asyncio.database import new_async_session_from_engine
+from sqlarec.asyncio.insert import AsyncInsert, AsyncModelInsert, AsyncRowInsert
 from sqlarec.asyncio.query import AsyncModelQuery, AsyncRowQuery, select_rows
 from sqlarec.asyncio.update import AsyncModelUpdate, AsyncRowUpdate
 
 __all__ = [
     "AsyncActiveRecordMixin",
     "AsyncBaseModel",
+    "AsyncInsert",
+    "AsyncModelInsert",
     "AsyncModelQuery",
     "AsyncModelUpdate",
+    "AsyncRowInsert",
     "AsyncRowQuery",
     "AsyncRowUpdate",
     "new_async_session_from_engine",
