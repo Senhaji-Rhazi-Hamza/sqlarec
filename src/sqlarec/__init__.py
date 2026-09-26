@@ -11,9 +11,12 @@ from sqlarec.core import (
     ModelInsert,
     ModelQuery,
     ModelUpdate,
+    ModelUpsert,
     RowInsert,
     RowQuery,
     RowUpdate,
+    RowUpsert,
+    Upsert,
     select_rows,
 )
 from sqlarec.database import new_session_from_engine
@@ -25,11 +28,14 @@ __all__ = [
     "ModelInsert",
     "ModelQuery",
     "ModelUpdate",
+    "ModelUpsert",
     "RowInsert",
     "RowQuery",
     "RowUpdate",
+    "RowUpsert",
+    "Upsert",
     "new_session_from_engine",
     "select_rows",
 ]
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

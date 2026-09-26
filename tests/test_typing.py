@@ -13,8 +13,11 @@ from sqlarec import (
     Insert,
     ModelInsert,
     ModelQuery,
+    ModelUpsert,
     RowInsert,
     RowQuery,
+    RowUpsert,
+    Upsert,
     new_session_from_engine,
     select_rows,
 )
@@ -23,8 +26,11 @@ from sqlarec.asyncio import (
     AsyncInsert,
     AsyncModelInsert,
     AsyncModelQuery,
+    AsyncModelUpsert,
     AsyncRowInsert,
     AsyncRowQuery,
+    AsyncRowUpsert,
+    AsyncUpsert,
     new_async_session_from_engine,
 )
 from sqlarec.asyncio import select_rows as select_async_rows
@@ -51,6 +57,9 @@ def _check_sync_types(session: Session) -> None:
     assert_type(User.insert(), Insert)
     assert_type(User.insert().values([]).returning(User), ModelInsert[User])
     assert_type(User.insert().values([]).returning(User.id), RowInsert)
+    assert_type(User.upsert(), Upsert)
+    assert_type(User.upsert().returning(User), ModelUpsert[User])
+    assert_type(User.upsert().returning(User.id), RowUpsert)
     assert_type(User.query.all(), Sequence[User])
     assert_type(User.query.exists(), bool)
     assert_type(select_rows(User.id, User.email), RowQuery)
@@ -74,6 +83,12 @@ async def _check_async_types(async_session: AsyncSession) -> None:
         AsyncUser.insert().values([]).returning(AsyncUser.id),
         AsyncRowInsert,
     )
+    assert_type(AsyncUser.upsert(), AsyncUpsert)
+    assert_type(
+        AsyncUser.upsert().returning(AsyncUser),
+        AsyncModelUpsert[AsyncUser],
+    )
+    assert_type(AsyncUser.upsert().returning(AsyncUser.id), AsyncRowUpsert)
     assert_type(await AsyncUser.query.all(), Sequence[AsyncUser])
     assert_type(await AsyncUser.query.exists(), bool)
     assert_type(select_async_rows(AsyncUser.id, AsyncUser.email), AsyncRowQuery)

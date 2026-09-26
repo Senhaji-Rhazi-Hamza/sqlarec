@@ -14,7 +14,6 @@ ModelT = TypeVar("ModelT")
 SessionT = TypeVar("SessionT")
 
 BulkParameters = tuple[dict[str, Any], ...]
-ValuePreparer = Callable[[Mapping[str, Any]], dict[str, Any]]
 
 
 class InsertBuilder(Generic[SessionT]):
@@ -24,12 +23,10 @@ class InsertBuilder(Generic[SessionT]):
         self,
         statement: SQLInsert,
         session: SessionT | Callable[[], SessionT],
-        prepare_values: ValuePreparer,
         parameters: BulkParameters | None = None,
     ) -> None:
         """Initialize a bulk insert with a session and value normalizer."""
         self.statement = statement
-        self._prepare_values = prepare_values
         self._parameters = parameters
         if callable(session):
             self._session_provider = cast(Callable[[], SessionT], session)
@@ -50,7 +47,6 @@ class InsertBuilder(Generic[SessionT]):
         return self.__class__(
             statement,
             self._session_provider,
-            self._prepare_values,
             self._parameters,
         )
 
@@ -66,7 +62,6 @@ class InsertBuilder(Generic[SessionT]):
         return self.__class__(
             self.statement,
             lambda: session,
-            self._prepare_values,
             self._parameters,
         )
 
@@ -94,7 +89,7 @@ class InsertBuilder(Generic[SessionT]):
         for row in rows:
             if not isinstance(row, Mapping):
                 raise TypeError("Each bulk insert row must be a mapping.")
-            prepared.append(self._prepare_values(row))
+            prepared.append(dict(row))
 
         if not prepared:
             raise ValueError("values() requires at least one mapping.")
@@ -102,7 +97,6 @@ class InsertBuilder(Generic[SessionT]):
         return self.__class__(
             self.statement,
             self._session_provider,
-            self._prepare_values,
             tuple(prepared),
         )
 
@@ -156,7 +150,6 @@ class Insert(InsertBuilder[Session]):
         return wrapper(
             statement,
             self._session_provider,
-            self._prepare_values,
             self._parameters,
         )
 

@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from sqlalchemy import Column, Integer, inspect
+from sqlalchemy import Integer, inspect
 from sqlalchemy import Sequence as SQLSequence
 from sqlalchemy.orm import InstanceState, Mapper
-
-from sqlarec.utils import generate_identifier_for_column
 
 
 class _ModelMixin:
@@ -82,27 +80,6 @@ class _ModelMixin:
             primary_key.default,
             SQLSequence,
         )
-
-    @classmethod
-    def _prepare_create_values(cls, **values: Any) -> dict[str, Any]:
-        """Return creation values with a generated identifier when required.
-
-        An identifier is only generated when the primary-key column type can
-        hold one. Columns of any other type, and primary keys that are also
-        foreign keys, are left untouched so that SQLAlchemy or the database
-        reports the missing value.
-        """
-        if (
-            cls.has_one_primary_key()
-            and cls.get_primary_key_name() not in values
-            and not cls.is_auto_increment()
-            and not cls.has_primary_key_default()
-        ):
-            primary_key = cast(Column[Any], cls._mapper().primary_key[0])
-            identifier = generate_identifier_for_column(primary_key)
-            if identifier is not None:
-                return {**values, cls.get_primary_key_name(): identifier}
-        return values
 
     def to_dict(self) -> dict[str, Any]:
         """Return mapped column values keyed by mapped attribute name.

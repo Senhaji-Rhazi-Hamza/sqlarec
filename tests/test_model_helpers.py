@@ -215,6 +215,12 @@ def test_supplied_primary_key_is_never_replaced(session: Session) -> None:
     assert narrow.id == "short"
 
 
+def test_explicit_session_creation_generates_an_identifier(session: Session) -> None:
+    instance = WideStringKeyed.create_with_session(session, name="explicit")
+
+    assert len(instance.id) == 32
+
+
 def test_get_or_create_returns_existing_row_when_defaults_differ(
     session: Session,
 ) -> None:

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, Self, cast, overload
 
+from sqlalchemy import Column, inspect, select, update
 from sqlalchemy import insert as sql_insert
-from sqlalchemy import inspect, select, update
 from sqlalchemy.orm import DeclarativeBase, InstanceState, Session
 
 from sqlarec.core.descriptors import _ClassProperty
@@ -14,6 +14,8 @@ from sqlarec.core.insert import Insert
 from sqlarec.core.model import _ModelMixin
 from sqlarec.core.query import ModelQuery, RowQuery, _ModelQueryProperty
 from sqlarec.core.update import Update
+from sqlarec.core.upsert import Upsert
+from sqlarec.utils import generate_identifier_for_column
 
 
 class ActiveRecordMixin(_ModelMixin):
@@ -60,8 +62,8 @@ class ActiveRecordMixin(_ModelMixin):
                 raise RuntimeError(
                     "No session provider registered. Call "
                     "ActiveRecordMixin.register_session_provider() or register it "
-                    "on an abstract model base at app startup. Query and update "
-                    "builders may instead use with_session() before execution."
+                    "on an abstract model base at app startup. Statement builders "
+                    "may instead use with_session() before execution."
                 )
             return provider()
 
@@ -104,10 +106,18 @@ class ActiveRecordMixin(_ModelMixin):
         and never commits it.
         """
 
-        def prepare(values: Mapping[str, Any]) -> dict[str, Any]:
-            return cls._prepare_create_values(**values)
+        return Insert(sql_insert(cls), cls._get_session_provider())
 
-        return Insert(sql_insert(cls), cls._get_session_provider(), prepare)
+    @classmethod
+    def upsert(cls) -> Upsert:
+        """Create an immutable native upsert wrapper for this model.
+
+        Candidate mappings are inserted when their configured unique key is
+        absent and update explicitly selected attributes when it is present.
+        The operation never commits the resolved session's transaction.
+        """
+
+        return Upsert(cls, cls._get_session_provider())
 
     @classmethod
     def create(cls, **values: Any) -> Self:
@@ -120,7 +130,17 @@ class ActiveRecordMixin(_ModelMixin):
         primary key that is also a foreign key, is left for SQLAlchemy or the
         database to report as missing.
         """
-        return cls.create_instance(**cls._prepare_create_values(**values))
+        if (
+            cls.has_one_primary_key()
+            and cls.get_primary_key_name() not in values
+            and not cls.is_auto_increment()
+            and not cls.has_primary_key_default()
+        ):
+            primary_key = cast(Column[Any], cls._mapper().primary_key[0])
+            identifier = generate_identifier_for_column(primary_key)
+            if identifier is not None:
+                values = {**values, cls.get_primary_key_name(): identifier}
+        return cls.create_instance(**values)
 
     @classmethod
     def create_with_session(
@@ -130,7 +150,17 @@ class ActiveRecordMixin(_ModelMixin):
         **values: Any,
     ) -> Self:
         """Construct, add, and flush a model through an explicit session."""
-        instance = cls(**cls._prepare_create_values(**values))
+        if (
+            cls.has_one_primary_key()
+            and cls.get_primary_key_name() not in values
+            and not cls.is_auto_increment()
+            and not cls.has_primary_key_default()
+        ):
+            primary_key = cast(Column[Any], cls._mapper().primary_key[0])
+            identifier = generate_identifier_for_column(primary_key)
+            if identifier is not None:
+                values = {**values, cls.get_primary_key_name(): identifier}
+        instance = cls(**values)
         session.add(instance)
         session.flush()
         return instance

@@ -1,4 +1,4 @@
-"""Immutable bulk insert wrappers for SQLAlchemy ``AsyncSession``."""
+"""Immutable upsert wrappers for SQLAlchemy ``AsyncSession``."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from sqlalchemy.engine import MappingResult, Result, Row, ScalarResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapper
 
-from sqlarec.core.insert import InsertBuilder
+from sqlarec.core.upsert import UpsertBuilder
 
 ModelT = TypeVar("ModelT")
 
 
-class AsyncInsert(InsertBuilder[AsyncSession]):
-    """Execute an async bulk insert or select a returning wrapper."""
+class AsyncUpsert(UpsertBuilder[AsyncSession]):
+    """Execute an async upsert or select a typed returning wrapper."""
 
     @overload
     def returning(
@@ -24,7 +24,7 @@ class AsyncInsert(InsertBuilder[AsyncSession]):
         entity: type[ModelT],
         /,
         **kwargs: Any,
-    ) -> AsyncModelInsert[ModelT]: ...
+    ) -> AsyncModelUpsert[ModelT]: ...
 
     @overload
     def returning(
@@ -33,7 +33,7 @@ class AsyncInsert(InsertBuilder[AsyncSession]):
         /,
         *columns: Any,
         **kwargs: Any,
-    ) -> AsyncRowInsert: ...
+    ) -> AsyncRowUpsert: ...
 
     def returning(
         self,
@@ -41,71 +41,69 @@ class AsyncInsert(InsertBuilder[AsyncSession]):
         /,
         *columns: Any,
         **kwargs: Any,
-    ) -> AsyncModelInsert[Any] | AsyncRowInsert:
-        """Return an entity or row insert for the returning expressions."""
+    ) -> AsyncModelUpsert[Any] | AsyncRowUpsert:
+        """Return an entity or row upsert for the returning expressions."""
         expressions = (entity_or_column, *columns)
-        statement = self.statement.returning(*expressions, **kwargs)
-        wrapper: type[AsyncModelInsert[Any]] | type[AsyncRowInsert]
+        wrapper: type[AsyncModelUpsert[Any]] | type[AsyncRowUpsert]
         if len(expressions) == 1 and isinstance(
             inspect(entity_or_column, raiseerr=False),
             Mapper,
         ):
-            wrapper = AsyncModelInsert
+            wrapper = AsyncModelUpsert
         else:
-            wrapper = AsyncRowInsert
+            wrapper = AsyncRowUpsert
         return wrapper(
-            statement,
+            self._model,
             self._session_provider,
             self._parameters,
+            self._conflict_attributes,
+            self._update_attributes,
+            expressions,
+            kwargs,
+            self._execution_options,
         )
 
     async def execute(self) -> Result[Any]:
-        """Execute the ORM bulk insert without committing the transaction."""
-        return await self.session.execute(
-            self.statement,
-            self._require_parameters(),
-        )
+        """Execute the upsert without committing the transaction."""
+        return await self.session.execute(self.statement)
 
 
-class AsyncModelInsert(InsertBuilder[AsyncSession], Generic[ModelT]):
-    """Execute an async bulk insert that returns mapped model instances."""
+class AsyncModelUpsert(UpsertBuilder[AsyncSession], Generic[ModelT]):
+    """Execute an async upsert that returns mapped model instances."""
 
     async def execute(self) -> ScalarResult[ModelT]:
-        """Execute the insert and return its scalar result."""
+        """Execute the upsert and refresh identities already in the session."""
         return await self.session.scalars(
             self.statement,
-            self._require_parameters(),
+            execution_options={"populate_existing": True},
         )
 
     async def all(self) -> Sequence[ModelT]:
-        """Return all inserted models produced by ``RETURNING``."""
+        """Return all models produced by the upsert."""
         return (await self.execute()).all()
 
     async def first(self) -> ModelT | None:
-        """Return the first inserted model, or ``None``."""
+        """Return the first produced model, or ``None``."""
         return (await self.execute()).first()
 
     async def one(self) -> ModelT:
-        """Return exactly one inserted model."""
+        """Return exactly one produced model."""
         return (await self.execute()).one()
 
     async def one_or_none(self) -> ModelT | None:
-        """Return zero or one inserted model."""
+        """Return zero or one produced model."""
         return (await self.execute()).one_or_none()
 
 
-class AsyncRowInsert(InsertBuilder[AsyncSession]):
-    """Execute an async bulk insert that returns SQLAlchemy rows."""
+class AsyncRowUpsert(UpsertBuilder[AsyncSession]):
+    """Execute an async upsert that returns SQLAlchemy rows."""
 
     async def execute(self) -> Result[Any]:
-        """Execute the insert and return its row result."""
-        return await self.session.execute(
-            self.statement,
-            self._require_parameters(),
-        )
+        """Execute the upsert and return its row result."""
+        return await self.session.execute(self.statement)
 
     async def all(self) -> Sequence[Row[Any]]:
-        """Return all rows produced by ``RETURNING``."""
+        """Return all rows produced by the upsert."""
         return (await self.execute()).all()
 
     async def first(self) -> Row[Any] | None:
@@ -121,5 +119,5 @@ class AsyncRowInsert(InsertBuilder[AsyncSession]):
         return (await self.execute()).one_or_none()
 
     async def mappings(self) -> MappingResult:
-        """Execute the insert and return mapping-style rows."""
+        """Execute the upsert and return mapping-style rows."""
         return (await self.execute()).mappings()

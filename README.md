@@ -108,7 +108,43 @@ session.commit()
 
 Bulk mappings use mapped Python attribute names. Tuples and model instances are
 not accepted: use `session.add_all(models)` when inserting existing ORM
-instances. The insert executes in the current transaction and never commits.
+instances. SQLARec uses these mappings exactly as supplied and does not generate
+identifiers for bulk inserts. The insert executes in the current transaction
+and never commits.
+
+### Upsert
+
+Insert new rows and update selected values when a primary or unique key already
+exists:
+
+```python
+users = (
+    User.upsert()
+    .values(
+        [
+            {"name": "Hamza S.", "email": "hamza@example.com"},
+            {"name": "Reader", "email": "reader@example.com"},
+        ]
+    )
+    .on_conflict(User.email)
+    .update_existing(User.name)
+    .returning(User)
+    .all()
+)
+session.commit()
+```
+
+This reads as: insert each candidate row; when its email conflicts, copy the
+candidate name into the existing row. Conflict columns must exactly match a
+primary key or declared unique constraint/index. Every mapping must contain the
+same mapped attribute names.
+
+Upsert mappings are also used exactly as supplied. Provide application-managed
+identifiers explicitly or configure normal SQLAlchemy/database defaults.
+
+SQLARec provides this common native operation for PostgreSQL and SQLite. It
+raises `NotImplementedError` on other databases instead of falling back to a
+non-atomic select-then-write sequence.
 
 ### Read
 
@@ -235,6 +271,20 @@ await session.commit()
 
 # Delete
 await user.delete()
+await session.commit()
+```
+
+Upserts follow the same builder chain:
+
+```python
+users = await (
+    User.upsert()
+    .values(rows)
+    .on_conflict(User.email)
+    .update_existing(User.name)
+    .returning(User)
+    .all()
+)
 await session.commit()
 ```
 
@@ -473,9 +523,9 @@ rows = await select_rows(User.id, User.email).with_session(async_session).all()
 
 ### Override the session for one builder
 
-Queries and updates normally resolve the session from the model's registered
-provider. Use `with_session()` when one builder chain must run through a
-specific session:
+Queries and DML builders normally resolve the session from the model's
+registered provider. Use `with_session()` when one builder chain must run
+through a specific session:
 
 ```python
 reporting_query = (
@@ -589,7 +639,11 @@ When nothing is generated the value is left for SQLAlchemy or the database to
 report as missing, rather than being filled with an identifier the column cannot
 store.
 
-### Return values from inserts and updates
+Identifier generation is an Active Record creation convenience provided by
+`create()` and `create_with_session()`. `create_instance()`, `insert()`, and
+`upsert()` use their supplied values without adding identifiers.
+
+### Return values from inserts, upserts, and updates
 
 Use `returning()` when supported by the database:
 
@@ -605,6 +659,15 @@ updated_users = (
     User.update()
     .where(User.active.is_(False))
     .values(active=True)
+    .returning(User)
+    .all()
+)
+
+upserted_users = (
+    User.upsert()
+    .values([{"name": "Hamza S.", "email": "hamza@example.com"}])
+    .on_conflict(User.email)
+    .update_existing(User.name)
     .returning(User)
     .all()
 )
@@ -624,10 +687,12 @@ inserted_rows = (
 
 ### Use the underlying SQLAlchemy statement
 
-Every query, insert, and update wrapper exposes `.statement`. Use it when
+Every query, insert, upsert, and update wrapper exposes `.statement`. Use it when
 SQLAlchemy supports an operation that the SQLARec wrapper does not expose
 directly. Insert builders keep bulk mappings in `.parameters` and pass them
 separately at execution time so SQLAlchemy can use its optimized ORM bulk path.
+An upsert's `.statement` property resolves the current session because the
+native statement depends on its database dialect.
 
 For example, add `with_for_update()` to a model query and execute the resulting
 SQLAlchemy statement with the registered session:
@@ -660,14 +725,14 @@ users = result.all()
 Models expose the session resolved from the registered provider through
 `Model.session`.
 
-For async models, await query results, lookup helpers, write methods, and update
+For async models, await query results, lookup helpers, write methods, and DML
 execution.
 
 ## Manage sessions in concurrent applications
 
 Register a zero-argument provider that returns the session for the current
-request, command, job, or task. Query and update builders retain this provider
-and resolve the current session only when a statement executes.
+request, command, job, or task. Query and DML builders retain this provider and
+resolve the current session only when a statement executes.
 
 For an async application, a `ContextVar` can bind one session to each task:
 
@@ -750,5 +815,6 @@ uv sync
 - Sync and async models use separate declarative bases and metadata registries.
 - Each concurrent task must use its own `AsyncSession`.
 - Async database drivers are selected and installed by the application.
+- Native upserts currently support PostgreSQL and SQLite.
 - Query wrappers cover common operations; use `.statement` and the resolved
   session for advanced SQLAlchemy features.

@@ -38,6 +38,14 @@ async def test_async_uuid_primary_key_receives_a_uuid_object(
     assert isinstance(instance.id, uuid.UUID)
 
 
+async def test_async_explicit_session_creation_generates_an_identifier(
+    async_session: AsyncSession,
+) -> None:
+    instance = await AsyncUuidKeyed.create_with_session(async_session, name="explicit")
+
+    assert isinstance(instance.id, uuid.UUID)
+
+
 async def test_async_get_or_create_returns_existing_row_when_defaults_differ(
     async_session: AsyncSession,
 ) -> None:

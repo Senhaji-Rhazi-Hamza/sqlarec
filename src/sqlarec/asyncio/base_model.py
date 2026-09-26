@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, Self, cast, overload
 
+from sqlalchemy import Column, inspect, select, update
 from sqlalchemy import insert as sql_insert
-from sqlalchemy import inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession
 from sqlalchemy.orm import DeclarativeBase, InstanceState
 
@@ -17,8 +17,10 @@ from sqlarec.asyncio.query import (
     _AsyncModelQueryProperty,
 )
 from sqlarec.asyncio.update import AsyncUpdate
+from sqlarec.asyncio.upsert import AsyncUpsert
 from sqlarec.core.descriptors import _ClassProperty
 from sqlarec.core.model import _ModelMixin
+from sqlarec.utils import generate_identifier_for_column
 
 
 class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
@@ -64,8 +66,8 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
                 raise RuntimeError(
                     "No async session provider registered. Call "
                     "AsyncActiveRecordMixin.register_session_provider() or register "
-                    "it on an abstract model base at app startup. Query and update "
-                    "builders may instead use with_session() before execution."
+                    "it on an abstract model base at app startup. Statement builders "
+                    "may instead use with_session() before execution."
                 )
             return provider()
 
@@ -108,10 +110,18 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
         current transaction, and never commits it.
         """
 
-        def prepare(values: Mapping[str, Any]) -> dict[str, Any]:
-            return cls._prepare_create_values(**values)
+        return AsyncInsert(sql_insert(cls), cls._get_session_provider())
 
-        return AsyncInsert(sql_insert(cls), cls._get_session_provider(), prepare)
+    @classmethod
+    def upsert(cls) -> AsyncUpsert:
+        """Create an immutable asynchronous native upsert wrapper.
+
+        Candidate mappings are inserted when their configured unique key is
+        absent and update explicitly selected attributes when it is present.
+        The operation never commits the resolved session's transaction.
+        """
+
+        return AsyncUpsert(cls, cls._get_session_provider())
 
     @classmethod
     async def create(cls, **values: Any) -> Self:
@@ -124,7 +134,17 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
         primary key that is also a foreign key, is left for SQLAlchemy or the
         database to report as missing.
         """
-        return await cls.create_instance(**cls._prepare_create_values(**values))
+        if (
+            cls.has_one_primary_key()
+            and cls.get_primary_key_name() not in values
+            and not cls.is_auto_increment()
+            and not cls.has_primary_key_default()
+        ):
+            primary_key = cast(Column[Any], cls._mapper().primary_key[0])
+            identifier = generate_identifier_for_column(primary_key)
+            if identifier is not None:
+                values = {**values, cls.get_primary_key_name(): identifier}
+        return await cls.create_instance(**values)
 
     @classmethod
     async def create_with_session(
@@ -134,7 +154,17 @@ class AsyncActiveRecordMixin(AsyncAttrs, _ModelMixin):
         **values: Any,
     ) -> Self:
         """Construct, add, and flush through an explicit async session."""
-        instance = cls(**cls._prepare_create_values(**values))
+        if (
+            cls.has_one_primary_key()
+            and cls.get_primary_key_name() not in values
+            and not cls.is_auto_increment()
+            and not cls.has_primary_key_default()
+        ):
+            primary_key = cast(Column[Any], cls._mapper().primary_key[0])
+            identifier = generate_identifier_for_column(primary_key)
+            if identifier is not None:
+                values = {**values, cls.get_primary_key_name(): identifier}
+        instance = cls(**values)
         session.add(instance)
         await session.flush()
         return instance

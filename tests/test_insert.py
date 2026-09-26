@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from conftest import AsyncUser, User
+from conftest import AsyncStringKeyedRecord, AsyncUser, StringKeyedRecord, User
 from sqlarec import BaseModel, Insert, ModelInsert, RowInsert
 from sqlarec.asyncio import AsyncInsert, AsyncModelInsert, AsyncRowInsert
 
@@ -72,6 +72,15 @@ def test_insert_requires_non_empty_mapping_iterable() -> None:
 
     with pytest.raises(TypeError, match="must be a mapping"):
         User.insert().values(cast(Any, [("Hamza", "hamza@example.com")]))
+
+
+def test_insert_preserves_supplied_mappings_without_generating_identifiers() -> None:
+    assert StringKeyedRecord.insert().values([{"name": "sync"}]).parameters == (
+        {"name": "sync"},
+    )
+    assert AsyncStringKeyedRecord.insert().values(
+        [{"name": "async"}]
+    ).parameters == ({"name": "async"},)
 
 
 def test_insert_can_use_an_explicit_session_without_provider(

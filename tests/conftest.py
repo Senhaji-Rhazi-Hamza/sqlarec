@@ -34,6 +34,24 @@ class AsyncUser(AsyncBaseModel):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class StringKeyedRecord(BaseModel):
+    """Test model whose application supplies bulk string identifiers."""
+
+    __tablename__ = "string_keyed_records"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+
+
+class AsyncStringKeyedRecord(AsyncBaseModel):
+    """Async test model with application-supplied bulk identifiers."""
+
+    __tablename__ = "string_keyed_records"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+
+
 @pytest.fixture
 def session() -> Iterator[Session]:
     """Provide an isolated in-memory database session."""
